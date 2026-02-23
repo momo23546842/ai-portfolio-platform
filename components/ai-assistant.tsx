@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect } from "react"
 import { Send, Mic, MicOff, Phone, PhoneOff, MessageCircle } from "lucide-react"
 
+type VapiClient = any
+
 interface Message {
   id: string
   role: "user" | "assistant"
@@ -25,6 +27,8 @@ export function AiAssistant() {
   const [callDuration, setCallDuration] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const vapiRef = useRef<VapiClient | null>(null)
+  const [callError, setCallError] = useState<string | null>(null)
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -54,7 +58,6 @@ export function AiAssistant() {
 
   const handleSend = () => {
     if (!input.trim()) return
-
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
@@ -63,20 +66,105 @@ export function AiAssistant() {
     setMessages((prev) => [...prev, userMessage])
     setInput("")
 
-    setTimeout(() => {
-      const replies = [
-        "Thanks for your question! Momoyo is a full-stack developer specializing in Next.js and AI-driven applications, with a background in nutrition science.",
-        "Great question! You can reach Momoyo through the contact form on this page, or schedule a meeting through the booking section.",
-        "Momoyo is currently based in Sydney, working as a Full-Stack AI System Developer and Team Lead at AusBiz Consulting.",
-        "Momoyo combines her expertise in technology and health science to build thoughtful digital experiences. Feel free to ask more!",
-      ]
-      const reply: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: replies[Math.floor(Math.random() * replies.length)],
+    // Send message to server-side chat endpoint which will consult the DB
+    ;(async () => {
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: userMessage.content }),
+        })
+        if (!res.ok) throw new Error("Chat request failed")
+        const data = await res.json()
+        const reply: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: data.reply,
+        }
+        setMessages((prev) => [...prev, reply])
+      } catch (err) {
+        const reply: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content:
+            "Sorry, I couldn't reach the assistant right now. Please try again later.",
+        }
+        setMessages((prev) => [...prev, reply])
       }
-      setMessages((prev) => [...prev, reply])
-    }, 1000)
+    })()
+  }
+
+  // Vapi voice control helpers
+  const startVapiCall = async () => {
+    if (!vapiRef.current) {
+      try {
+        const mod = await import("@vapi-ai/web")
+        const Vapi = mod?.default ?? mod?.Vapi ?? mod
+        vapiRef.current = new Vapi(process.env.NEXT_PUBLIC_VAPI_API_KEY)
+      } catch (e) {
+        console.error("Failed to load Vapi client", e)
+        setCallError("Failed to load voice client.")
+        return
+      }
+    }
+
+    try {
+      setCallError(null)
+      await vapiRef.current.start(process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID)
+      setIsCallActive(true)
+
+      // attach events
+      vapiRef.current.on?.("call-start", () => {
+        console.log("call-start")
+        setCallError(null)
+      })
+      vapiRef.current.on?.("call-end", (info?: any) => {
+        console.log("call-end", info)
+        setIsCallActive(false)
+        setIsMuted(false)
+        setCallDuration(0)
+        if (info?.reason) {
+          setCallError(typeof info.reason === "string" ? info.reason : "Call ended")
+        }
+      })
+      vapiRef.current.on?.("speech-start", () => {
+        console.log("speech-start")
+      })
+      vapiRef.current.on?.("speech-end", () => {
+        console.log("speech-end")
+      })
+      vapiRef.current.on?.("error", (err: any) => {
+        console.error("Vapi error", err)
+        setCallError(err?.message ?? String(err) ?? "An unknown audio call error occurred")
+        setIsCallActive(false)
+        setIsMuted(false)
+      })
+    } catch (err) {
+      console.error("Vapi start error", err)
+      setCallError((err as any)?.message ?? "Failed to start the call")
+      setIsCallActive(false)
+    }
+  }
+
+  const stopVapiCall = async () => {
+    try {
+      await vapiRef.current?.stop()
+    } catch (e) {
+      console.error("Vapi stop error", e)
+      setCallError("Failed to stop the call gracefully.")
+    }
+    setIsCallActive(false)
+    setIsMuted(false)
+  }
+
+  const setVapiMuted = async (muted: boolean) => {
+    try {
+      await vapiRef.current?.setMuted?.(muted)
+      setIsMuted(muted)
+    } catch (e) {
+      console.error("Vapi mute error", e)
+      setCallError("Failed to mute/unmute the call.")
+    }
   }
 
   return (
@@ -201,7 +289,7 @@ export function AiAssistant() {
 
                   <div className="flex items-center gap-6">
                     <button
-                      onClick={() => setIsMuted(!isMuted)}
+                      onClick={() => setVapiMuted(!isMuted)}
                       className={`flex h-14 w-14 items-center justify-center rounded-full transition-colors ${
                         isMuted
                           ? "bg-destructive/20 text-destructive"
@@ -217,8 +305,7 @@ export function AiAssistant() {
                     </button>
                     <button
                       onClick={() => {
-                        setIsCallActive(false)
-                        setIsMuted(false)
+                        stopVapiCall()
                       }}
                       className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive text-card transition-transform hover:scale-105"
                       aria-label="End call"
@@ -242,7 +329,7 @@ export function AiAssistant() {
                     </p>
                   </div>
                   <button
-                    onClick={() => setIsCallActive(true)}
+                    onClick={() => startVapiCall()}
                     className="flex items-center gap-2 rounded-full bg-primary px-8 py-3 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:shadow-xl hover:shadow-primary/30 hover:brightness-110"
                   >
                     <Phone className="h-4 w-4" />
