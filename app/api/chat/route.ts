@@ -37,9 +37,8 @@ export async function POST(req: NextRequest) {
     const parts: string[] = []
     if (profile) {
       parts.push(`Name: ${profile.name ?? ''}`)
-      if (profile.headline) parts.push(`Headline: ${profile.headline}`)
+      if (profile.catchphrase) parts.push(`Catchphrase: ${profile.catchphrase}`)
       if (profile.bio) parts.push(`Bio: ${profile.bio}`)
-      if (profile.location) parts.push(`Location: ${profile.location}`)
     }
     if (resumes.length) {
       const jobs = resumes

@@ -98,9 +98,9 @@ export function AiAssistant() {
   const startVapiCall = async () => {
     if (!vapiRef.current) {
       try {
-        const mod = await import("@vapi-ai/web")
-        const Vapi = mod?.default ?? mod?.Vapi ?? mod
-        vapiRef.current = new Vapi(process.env.NEXT_PUBLIC_VAPI_API_KEY)
+          const mod = await import("@vapi-ai/web")
+          const Vapi = mod.default
+        vapiRef.current = new Vapi(String(process.env.NEXT_PUBLIC_VAPI_API_KEY))
       } catch (e) {
         console.error("Failed to load Vapi client", e)
         setCallError("Failed to load voice client.")
