@@ -200,48 +200,15 @@ export async function POST(req: NextRequest) {
     // Short-circuit for non-final webhook events: avoid MCP/Groq on partial updates.
     const msgType = payload?.message?.type || ''
     const msgStatus = payload?.message?.status || ''
-    // If this is not a final user speech update, skip MCP/Groq but return
-    // a valid assistant message so Vapi doesn't fall back to its own model.
-    // Prefer repeating the last assistant message from the payload; if none
-    // is available, return a minimal neutral message '...'.
-    if (msgType !== 'speech-update' || (msgStatus && msgStatus !== 'stopped' && msgStatus !== 'final')) {
-      console.log('Non-final Vapi event received (type:', msgType, 'status:', msgStatus, '); skipping MCP/Groq')
-
-      // Attempt to find the last assistant message in the artifact arrays
-      let lastAssistant = ''
-      try {
-        const formatted = payload?.message?.artifact?.messagesOpenAIFormatted
-        if (Array.isArray(formatted) && formatted.length > 0) {
-          for (let i = formatted.length - 1; i >= 0; i--) {
-            const itm = formatted[i]
-            if (itm?.role === 'assistant' && itm?.content) {
-              lastAssistant = String(itm.content)
-              break
-            }
-          }
-        }
-
-        if (!lastAssistant) {
-          const msgs = payload?.message?.artifact?.messages
-          if (Array.isArray(msgs) && msgs.length > 0) {
-            for (let i = msgs.length - 1; i >= 0; i--) {
-              const itm = msgs[i]
-              if (itm?.role === 'assistant') {
-                const body = itm?.message
-                if (typeof body === 'string') lastAssistant = body
-                else if (body && typeof body === 'object') lastAssistant = body.message || body.text || ''
-                if (lastAssistant) break
-              }
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('Error extracting last assistant message from payload', e)
-      }
-
-      if (!lastAssistant) lastAssistant = '...'
-
-      return NextResponse.json({ response: { message: { role: 'assistant', content: lastAssistant } }, messageResponse: { message: { role: 'assistant', content: lastAssistant } } })
+    // Only proceed to call MCP and the LLM when this is a final user speech
+    // event and the extracted user message is non-empty. This prevents
+    // assistant->assistant loops and empty-prompt generations.
+    const messageRole = payload?.message?.role || ''
+    const trimmedUserMessage = String(userMessage || '').trim()
+    if (!(msgType === 'speech-update' && msgStatus === 'stopped' && messageRole === 'user' && trimmedUserMessage)) {
+      console.log('Skipping MCP/Groq: not a final user speech with content (type:', msgType, 'status:', msgStatus, 'role:', messageRole, ')')
+      const safe = '...'
+      return NextResponse.json({ response: { message: { role: 'assistant', content: safe } }, messageResponse: { message: { role: 'assistant', content: safe } } })
     }
 
     // MCP helper: call the local MCP JSON-RPC /api/mcp endpoint
