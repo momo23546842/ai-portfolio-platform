@@ -218,13 +218,15 @@ export async function POST(req: NextRequest) {
     try {
       replyText = await callGroqWithContext(String(userMessage || ''), trimmedContext)
       console.log('Groq response:', replyText)
+      console.log('Groq reply:', replyText?.slice(0, 200))
     } catch (e: any) {
       console.error('Groq call failed in webhook', e)
       // If non-rate-limit error propagated, fall back to deterministic message
-      return NextResponse.json({ messageResponse: { message: { role: 'assistant', content: 'I cannot find this information in the database.' } } })
+      return NextResponse.json({ response: { message: { role: 'assistant', content: 'I cannot find this information in the database.' } } })
     }
 
-    return NextResponse.json({ messageResponse: { message: { role: 'assistant', content: replyText } } })
+    console.log('Sending response to Vapi')
+    return NextResponse.json({ response: { message: { role: 'assistant', content: replyText } } })
   } catch (err) {
     console.error('Vapi webhook error', err)
     return NextResponse.json({ response: { message: { role: 'assistant', content: "I'm sorry, I couldn't retrieve that information." } } }, { status: 500 })
