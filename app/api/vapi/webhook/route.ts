@@ -205,8 +205,30 @@ export async function POST(req: NextRequest) {
     // assistant->assistant loops and empty-prompt generations.
     const messageRole = payload?.message?.role || ''
     const trimmedUserMessage = String(userMessage || '').trim()
-    if (!(msgType === 'speech-update' && msgStatus === 'stopped' && messageRole === 'user' && trimmedUserMessage)) {
-      console.log('Skipping MCP/Groq: not a final user speech with content (type:', msgType, 'status:', msgStatus, 'role:', messageRole, ')')
+
+    // Consider artifact arrays: some Vapi events set top-level role to
+    // 'assistant' while embedding the most recent user utterance inside
+    // artifact.messagesOpenAIFormatted or artifact.messages. Treat the
+    // event as user-driven if either the top-level role is 'user' OR the
+    // artifact contains a user message.
+    let hasUserInArtifact = false
+    try {
+      const formatted = payload?.message?.artifact?.messagesOpenAIFormatted
+      if (Array.isArray(formatted) && formatted.length > 0) {
+        hasUserInArtifact = formatted.some((itm: any) => itm?.role === 'user' && itm?.content)
+      }
+      if (!hasUserInArtifact) {
+        const msgs = payload?.message?.artifact?.messages
+        if (Array.isArray(msgs) && msgs.length > 0) {
+          hasUserInArtifact = msgs.some((itm: any) => itm?.role === 'user' && (typeof itm?.message === 'string' ? itm.message : (itm?.message?.message || itm?.message?.text)))
+        }
+      }
+    } catch (e) {
+      console.warn('Error while checking artifact for user message', e)
+    }
+
+    if (!(msgType === 'speech-update' && msgStatus === 'stopped' && (messageRole === 'user' || hasUserInArtifact) && trimmedUserMessage)) {
+      console.log('Skipping MCP/Groq: not a final user speech with content (type:', msgType, 'status:', msgStatus, 'role:', messageRole, 'hasUserInArtifact:', hasUserInArtifact, ')')
       const safe = '...'
       return NextResponse.json({ response: { message: { role: 'assistant', content: safe } }, messageResponse: { message: { role: 'assistant', content: safe } } })
     }
