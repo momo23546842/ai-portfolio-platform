@@ -58,19 +58,20 @@ export async function POST(req: NextRequest) {
       console.log('Using fallback test userId')
     }
 
-    // Example Prisma queries using userId (adjust field names to match schema):
-    // const profile = await prisma.profile.findFirst({ where: { userId: String(userId) } })
-    // const career = await prisma.resume.findMany({ where: { userId: String(userId) }, orderBy: { startDate: 'desc' } })
-    // const skills = await prisma.skill.findMany({ where: { userId: String(userId) } })
+    // Note: current Prisma schema stores Profile / Resume / Skill as global records
+    // (no userId field). Use global queries accordingly.
+    console.log('Resolved userId:', userId, 'typeof:', typeof userId)
+    console.log('Profile lookup field used: <none - global Profile>')
 
     let profile = null
     let career: any[] = []
     let skills: any[] = []
 
     try {
-      profile = await prisma.profile.findFirst({ where: { userId: String(userId) } })
-      career = await prisma.resume.findMany({ where: { userId: String(userId) }, orderBy: { startDate: 'desc' } })
-      skills = await prisma.skill.findMany({ where: { userId: String(userId) } })
+      // Global profile (no user scoping in schema)
+      profile = await prisma.profile.findFirst()
+      career = await prisma.resume.findMany({ orderBy: { startDate: 'desc' } })
+      skills = await prisma.skill.findMany()
     } catch (dbErr) {
       console.error('DB query failed', dbErr)
       // Per requirement: return HTTP 200 with an explicit message
