@@ -36,15 +36,33 @@ export async function GET() {
 type ToolName = 'getProfile' | 'getCareer' | 'getSkills'
 
 async function getProfile() {
-  return prisma.profile.findFirst()
+  const result = await prisma.profile.findFirst()
+  try {
+    console.log('getProfile called, result:', JSON.stringify(result))
+  } catch (e) {
+    console.log('getProfile called, result (non-serializable)')
+  }
+  return result
 }
 
 async function getCareer() {
-  return prisma.resume.findMany({ orderBy: { startDate: 'desc' } })
+  const result = await prisma.resume.findMany({ orderBy: { startDate: 'desc' } })
+  try {
+    console.log('getCareer called, result:', JSON.stringify(result))
+  } catch (e) {
+    console.log('getCareer called, result (non-serializable)')
+  }
+  return result
 }
 
 async function getSkills() {
-  return prisma.skill.findMany({ orderBy: { category: 'asc' } })
+  const result = await prisma.skill.findMany({ orderBy: { category: 'asc' } })
+  try {
+    console.log('getSkills called, result:', JSON.stringify(result))
+  } catch (e) {
+    console.log('getSkills called, result (non-serializable)')
+  }
+  return result
 }
 
 // POST: JSON-RPC 2.0 MCP support (initialize, tools/list, tools/call)
@@ -101,8 +119,19 @@ export async function POST(req: Request) {
       for (const call of toolCallList) {
         const callId = call?.id || call?.toolCallId || 'generated-1'
         const fnName: string | undefined = call?.function?.name || call?.functionName || call?.name || params?.name
+        const argsRaw = call?.function?.arguments ?? call?.arguments ?? '{}'
+        let args: any = {}
+        if (typeof argsRaw === 'string') {
+          try {
+            args = argsRaw ? JSON.parse(argsRaw) : {}
+          } catch (e) {
+            args = {}
+          }
+        } else {
+          args = argsRaw
+        }
 
-        console.log('MCP tools/call executing', { callId, fnName })
+        console.log('MCP tools/call received:', fnName, args)
 
         if (!fnName) {
           content.push({ type: 'text', text: JSON.stringify({ error: 'missing function name' }) })
