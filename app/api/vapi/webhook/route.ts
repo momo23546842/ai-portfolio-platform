@@ -463,7 +463,18 @@ export async function POST(req: NextRequest) {
             'tools',
             'mcp',
             'db_context',
-            'database context'
+            'database context',
+            // Prevent the model from mentioning voice provider or talent details
+            'voice actress',
+            'voice actor',
+            '11labs',
+            'eleven',
+            'voiceid',
+            'voice id',
+            // Prevent references to training data or datasets
+            'trained on',
+            'training data',
+            'dataset'
           ]
         const low = String(replyText || '').toLowerCase()
         const missingInfoExact = 'i cannot find this information in the database.'
