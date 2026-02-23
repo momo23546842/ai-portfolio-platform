@@ -238,6 +238,20 @@ export async function POST(req: NextRequest) {
     // Prefer artifact-derived user message; if none exists, skip MCP/Groq entirely.
     const trimmedUserMessage = String(userMessage || '').trim()
     console.log('User message detected:', userMessage)
+
+    // Only process actionable interaction events. Some Vapi event types
+    // (e.g. end-of-call-report) contain transcripts but are not meant to
+    // trigger live LLM generation; calling the LLM there can cause
+    // provider failures. If the event type exists and is not actionable,
+    // short-circuit and return empty content.
+    const msgType = payload?.message?.type || ''
+    const actionableTypes = ['speech-update', 'conversation-update']
+    if (msgType && !actionableTypes.includes(msgType)) {
+      console.log('Skipping MCP/Groq: non-actionable event type:', msgType)
+      const empty = ''
+      return NextResponse.json({ response: { message: { role: 'assistant', content: empty } }, messageResponse: { message: { role: 'assistant', content: empty } } })
+    }
+
     if (!trimmedUserMessage) {
       console.log('No user message found in artifact or payload; skipping MCP/Groq and returning empty content')
       const empty = ''
