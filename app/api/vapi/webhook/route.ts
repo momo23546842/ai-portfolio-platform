@@ -252,11 +252,10 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      let timedOut = false
       const timeoutMs = 15000
+      let timer: any = null
       const timeoutPromise = new Promise<string>((resolve) => {
-        setTimeout(() => {
-          timedOut = true
+        timer = setTimeout(() => {
           console.warn(`Groq call timed out after ${timeoutMs}ms; using deterministic fallback`)
           resolve(deterministicReplyFromContext(trimmedContext))
         }, timeoutMs)
@@ -266,9 +265,11 @@ export async function POST(req: NextRequest) {
 
       replyText = await Promise.race([groqPromise, timeoutPromise])
 
+      // If Groq resolved first, cancel the timeout so its callback doesn't run later
+      if (timer) clearTimeout(timer)
+
       console.log('Groq response:', replyText)
       console.log('Groq reply:', replyText?.slice(0, 200))
-      if (timedOut) console.log('Returned deterministic fallback due to timeout')
     } catch (e: any) {
       console.error('Groq call failed in webhook', e)
       // Fallback deterministic reply if Groq errors
