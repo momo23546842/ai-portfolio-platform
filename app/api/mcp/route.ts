@@ -70,8 +70,15 @@ export async function POST(req: Request) {
       }
     }
 
-    const tool = body?.tool as ToolName | undefined
+    // Log incoming request for debugging
+    console.log('MCP POST request body:', JSON.stringify(body))
+
+    // Support multiple request shapes. Prefer explicit tool and toolCallId.
+    const tool = (body?.tool as ToolName) || body?.toolCall?.tool || body?.toolCall?.toolName
+    const toolCallId = body?.toolCallId || body?.toolCall?.id || body?.toolCall?.toolCallId || body?.id || body?.toolCall?.toolCallId || null
+
     if (!tool) {
+      console.warn('MCP POST missing tool in body')
       return NextResponse.json({ error: 'tool required' }, { status: 400 })
     }
 
@@ -83,21 +90,25 @@ export async function POST(req: Request) {
     } else if (tool === 'getSkills') {
       result = await getSkills()
     } else {
+      console.warn('MCP POST unknown tool:', tool)
       return NextResponse.json({ error: `unknown tool: ${tool}` }, { status: 400 })
     }
 
-    // Stream the JSON response to allow chunked/streaming transports.
-    const encoder = new TextEncoder()
-    const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(encoder.encode(JSON.stringify({ result })))
-        controller.close()
-      },
-    })
+    const resultStr = typeof result === 'string' ? result : JSON.stringify(result)
 
-    return new Response(stream, {
-      headers: { 'Content-Type': 'application/json' },
-    })
+    const responsePayload = {
+      results: [
+        {
+          toolCallId: toolCallId ?? 'generated-1',
+          result: resultStr,
+        },
+      ],
+    }
+
+    console.log('MCP POST response payload:', JSON.stringify(responsePayload))
+
+    // Return JSON response (not streaming) in MCP expected format
+    return NextResponse.json(responsePayload)
   } catch (err) {
     console.error('MCP route error', err)
     return NextResponse.json({ error: 'internal' }, { status: 500 })
