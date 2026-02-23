@@ -210,7 +210,7 @@ export async function POST(req: NextRequest) {
 
     // If there's no data, respond with the standardized missing-info message
     if (!DB_CONTEXT.profile && (!DB_CONTEXT.career || DB_CONTEXT.career.length === 0) && (!DB_CONTEXT.skills || DB_CONTEXT.skills.length === 0)) {
-      return NextResponse.json({ response: { message: { role: 'assistant', content: 'I cannot find this information in the database.' } } })
+      return NextResponse.json({ messageResponse: { message: { role: 'assistant', content: 'I cannot find this information in the database.' } } })
     }
 
     // Call LLM with strict DB_CONTEXT
@@ -222,13 +222,13 @@ export async function POST(req: NextRequest) {
     } catch (e: any) {
       console.error('Groq call failed in webhook', e)
       // If non-rate-limit error propagated, fall back to deterministic message
-      return NextResponse.json({ response: { message: { role: 'assistant', content: 'I cannot find this information in the database.' } } })
+      return NextResponse.json({ messageResponse: { message: { role: 'assistant', content: 'I cannot find this information in the database.' } } })
     }
 
     console.log('Sending response to Vapi')
-    return NextResponse.json({ response: { message: { role: 'assistant', content: replyText } } })
+    return NextResponse.json({ messageResponse: { message: { role: 'assistant', content: replyText } } })
   } catch (err) {
     console.error('Vapi webhook error', err)
-    return NextResponse.json({ response: { message: { role: 'assistant', content: "I'm sorry, I couldn't retrieve that information." } } }, { status: 500 })
+    return NextResponse.json({ messageResponse: { message: { role: 'assistant', content: "I'm sorry, I couldn't retrieve that information." } } }, { status: 500 })
   }
 }
