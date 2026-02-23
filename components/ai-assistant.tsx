@@ -110,7 +110,38 @@ export function AiAssistant() {
 
     try {
       setCallError(null)
-      await vapiRef.current.start(process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID)
+
+      // Fetch dynamic system prompt from server
+      let systemPrompt: string | undefined = undefined
+      try {
+        const resp = await fetch('/api/vapi/system-prompt')
+        if (resp.ok) {
+          const data = await resp.json()
+          systemPrompt = data?.systemPrompt
+        } else {
+          console.warn('Failed to fetch system prompt', resp.status)
+        }
+      } catch (err) {
+        console.warn('Error fetching system prompt', err)
+      }
+
+      await vapiRef.current.start({
+        assistantId: process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID,
+        transcriber: {
+          provider: 'deepgram',
+          model: 'nova-2',
+          language: 'en-US',
+        },
+        model: {
+          provider: 'groq',
+          model: 'llama-3.3-70b-versatile',
+          systemPrompt: systemPrompt,
+        },
+        voice: {
+          provider: '11labs',
+          voiceId: String(process.env.NEXT_PUBLIC_ELEVENLABS_VOICE_ID),
+        },
+      })
       setIsCallActive(true)
 
       // attach events

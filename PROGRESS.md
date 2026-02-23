@@ -39,3 +39,23 @@
 - 原因：VapiがツールのレスポンスをLLMに正しく渡せていない可能性
 - 試したこと：レスポンスをラップ、モデル変更、システムプロンプト変更
 - 次回：Custom Functionsで試す、またはVapiのServerURLを使ったWebhook方式を検討
+
+
+## Vercelデプロイ時のトラブルシューティング
+
+### 問題1：重複定義（Duplicate identifier）
+- 原因：V0のUIをマージした際にcomponents/ui/内で同じimportやコンポーネントが重複
+- 解決：components/ui/内の重複ブロック・importを削除
+
+### 問題2：Prismaクライアントが無い
+- 原因：prisma/schema.prismaとmigrationsがコミットされていなかった
+- 解決：npx prisma generateを実行し、package.jsonにpostinstallを追加
+  "postinstall": "prisma generate"
+
+### 問題3：ライブラリ不足
+- 原因：V0のUIで使用しているRadixなどのライブラリが未インストール
+- 解決：npm install @radix-ui/react-accordion などを追加
+
+### 問題4：Windows一時フォルダ権限エラー
+- 原因：shadcn実行時にTempフォルダへのアクセス権限エラー
+- 解決：$env:TEMP = "C:\Temp" で一時フォルダを変更してから実行
