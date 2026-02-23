@@ -32,13 +32,43 @@ async function callGroqWithContext(prompt: string, dbContext: any, language = 'e
     const reply = response?.choices?.[0]?.message?.content ?? JSON.stringify(response)
     return String(reply)
   } catch (err: any) {
-    // Handle rate limit (429) gracefully by returning a deterministic fallback
+    // Handle rate limit (429): attempt single retry if Groq suggests wait time, else fall back deterministically
     const status = err?.status || err?.statusCode || err?.code
     const message = err?.message || String(err)
     console.error('Groq call error:', status, message)
-    if (status === 429 || String(message).toLowerCase().includes('rate_limit') || String(message).toLowerCase().includes('rate limit') || String(message).toLowerCase().includes('rate_limit_exceeded')) {
-      console.warn('Groq rate limit detected; returning deterministic fallback from DB_CONTEXT')
-      // Build a deterministic reply from DB_CONTEXT (no LLM)
+    const isRateLimit = status === 429 || String(message).toLowerCase().includes('rate_limit') || String(message).toLowerCase().includes('rate limit') || String(message).toLowerCase().includes('rate_limit_exceeded') || /please try again in/i.test(String(message))
+    if (isRateLimit) {
+      try {
+        // parse suggested wait from message like "Please try again in Xs"
+        const m = String(message).match(/please try again in\s*(\d+(?:\.\d+)?)s/i)
+        const waitSec = m ? Math.min(parseFloat(m[1]), 2.0) : 0
+        if (waitSec && waitSec > 0) {
+          console.warn(`Groq rate limit detected; retrying after ${waitSec}s`) 
+          await new Promise((r) => setTimeout(r, Math.round(waitSec * 1000)))
+        } else {
+          console.warn('Groq rate limit detected; retrying immediately')
+        }
+
+        // retry once
+        try {
+          const resp2 = await groq.chat.completions.create({
+            model,
+            messages: [
+              { role: 'system', content: systemContent },
+              { role: 'user', content: prompt },
+            ],
+          })
+          const reply2 = resp2?.choices?.[0]?.message?.content ?? JSON.stringify(resp2)
+          return String(reply2)
+        } catch (err2: any) {
+          console.error('Groq retry failed:', err2?.status || err2?.message || err2)
+        }
+      } catch (retryErr) {
+        console.error('Error during Groq retry wait', retryErr)
+      }
+
+      // fallback deterministic reply from DB_CONTEXT
+      console.warn('Groq rate limit fallback: returning deterministic reply from DB_CONTEXT')
       try {
         const profile = dbContext?.profile ?? {}
         const career = Array.isArray(dbContext?.career) ? dbContext.career : []
@@ -104,8 +134,50 @@ export async function POST(req: NextRequest) {
     }
     console.log('Resolved userId:', userId, 'source:', userIdSource)
 
-    // Extract user's prompt from webhook payload
-    const userMessage = payload?.message?.content || payload?.message?.text || payload?.text || payload?.user?.message || ''
+    // Extract user's prompt from webhook payload.
+    // Prefer the last user message from artifact.messagesOpenAIFormatted, then artifact.messages, then fallback fields.
+    let userMessage = ''
+    let userMessageSource = 'fallback'
+
+    try {
+      const formatted = payload?.message?.artifact?.messagesOpenAIFormatted
+      if (Array.isArray(formatted) && formatted.length > 0) {
+        for (let i = formatted.length - 1; i >= 0; i--) {
+          const itm = formatted[i]
+          if (itm?.role === 'user' && itm?.content) {
+            userMessage = String(itm.content)
+            userMessageSource = 'artifact.messagesOpenAIFormatted'
+            break
+          }
+        }
+      }
+
+      if (!userMessage) {
+        const msgs = payload?.message?.artifact?.messages
+        if (Array.isArray(msgs) && msgs.length > 0) {
+          for (let i = msgs.length - 1; i >= 0; i--) {
+            const itm = msgs[i]
+            if (itm?.role === 'user') {
+              const body = itm?.message
+              if (typeof body === 'string') userMessage = body
+              else if (body && typeof body === 'object') userMessage = body.message || body.text || ''
+              if (userMessage) {
+                userMessageSource = 'artifact.messages'
+                break
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error extracting userMessage from artifact arrays', e)
+    }
+
+    if (!userMessage) {
+      userMessage = payload?.message?.content || payload?.message?.text || payload?.text || payload?.user?.message || ''
+      userMessageSource = userMessage ? 'fallback-fields' : 'empty'
+    }
+    console.log('Resolved userMessage source:', userMessageSource)
 
     // MCP helper: call the local MCP JSON-RPC /api/mcp endpoint
     async function callMcpTool(toolName: string, userIdArg: string) {
@@ -180,8 +252,8 @@ export async function POST(req: NextRequest) {
 
     const DB_CONTEXT = { profile: parsedProfile ?? null, career: parsedCareer ?? [], skills: parsedSkills ?? [] }
 
-    // Trim DB_CONTEXT to reduce token usage: career top 3, skills top 20, truncate long strings
-    function truncateString(s: any, max = 200) {
+    // Trim DB_CONTEXT to reduce token usage: career top 2, skills top 10, truncate long strings
+    function truncateString(s: any, max = 120) {
       if (typeof s !== 'string') return s
       return s.length > max ? s.slice(0, max) + '…' : s
     }
@@ -197,10 +269,10 @@ export async function POST(req: NextRequest) {
       return out
     }
 
-    const trimmedCareer = Array.isArray(DB_CONTEXT.career) ? DB_CONTEXT.career.slice(0, 3).map(trimItemStrings) : []
+    const trimmedCareer = Array.isArray(DB_CONTEXT.career) ? DB_CONTEXT.career.slice(0, 2).map(trimItemStrings) : []
     let trimmedSkills: any[] = []
     if (Array.isArray(DB_CONTEXT.skills)) {
-      trimmedSkills = DB_CONTEXT.skills.slice(0, 20).map((s: any) => (typeof s === 'string' ? truncateString(s, 200) : trimItemStrings(s)))
+      trimmedSkills = DB_CONTEXT.skills.slice(0, 10).map((s: any) => (typeof s === 'string' ? truncateString(s, 120) : trimItemStrings(s)))
     }
 
     const trimmedContext = { profile: DB_CONTEXT.profile ? trimItemStrings(DB_CONTEXT.profile) : null, career: trimmedCareer, skills: trimmedSkills }
