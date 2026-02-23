@@ -1,156 +1,132 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
-// Simple MCP-like route that supports a handshake (GET) and tool calls (POST).
-// This implementation provides three tools backed by Prisma:
-// - getProfile
-// - getCareer
-// - getSkills
-// For production-grade MCP integration you can wire the official
-// StreamableHTTPServerTransport from '@modelcontextprotocol/sdk'.
+export const runtime = 'nodejs'
 
+// GET: simple handshake for tooling / browser checks
 export async function GET() {
   const handshake = {
     name: 'momoyo-ai-mcp',
     version: '1.0.0',
     tools: [
-      {
-        name: 'getProfile',
-        description: 'Returns the profile information from database',
-        input: null,
-      },
-      {
-        name: 'getCareer',
-        description: 'Returns resume / career entries',
-        input: null,
-      },
-      {
-        name: 'getSkills',
-        description: 'Returns skill list',
-        input: null,
-      },
+      { name: 'getProfile', description: 'Returns the profile information from database' },
+      { name: 'getCareer', description: 'Returns resume / career entries' },
+      { name: 'getSkills', description: 'Returns skill list' },
     ],
   }
-
   return NextResponse.json(handshake)
 }
 
+// Tool implementations
 type ToolName = 'getProfile' | 'getCareer' | 'getSkills'
 
 async function getProfile() {
-  const p = await prisma.profile.findFirst()
-  return p
+  return prisma.profile.findFirst()
 }
 
 async function getCareer() {
-  const rows = await prisma.resume.findMany({ orderBy: { startDate: 'desc' } })
-  return rows
+  return prisma.resume.findMany({ orderBy: { startDate: 'desc' } })
 }
 
 async function getSkills() {
-  const rows = await prisma.skill.findMany({ orderBy: { category: 'asc' } })
-  return rows
+  return prisma.skill.findMany({ orderBy: { category: 'asc' } })
 }
 
-// POST /api/mcp — accept JSON body { tool: string, params?: any }
-// and return a streamable JSON result. This is intentionally simple so it
-// works without requiring the MCP SDK; the SDK can be integrated later.
+// POST: JSON-RPC 2.0 MCP support (initialize, tools/list, tools/call)
 export async function POST(req: Request) {
   try {
-    const contentType = req.headers.get('content-type') || ''
-
-    // Always read raw text so we can log exactly what Vapi sends.
     const raw = await req.text()
-    console.log('MCP POST raw request text:', raw)
+    console.log('MCP JSON-RPC raw request:', raw)
 
-    let body: any = {}
-    if (contentType.includes('application/json')) {
-      try {
-        body = raw ? JSON.parse(raw) : {}
-      } catch (e) {
-        // Fallback to req.json() if parsing failed
-        try {
-          body = await req.json()
-        } catch (e2) {
-          body = {}
+    let payload: any = {}
+    try {
+      payload = raw ? JSON.parse(raw) : {}
+    } catch (e) {
+      console.warn('MCP JSON-RPC failed to parse JSON:', String(e))
+      return NextResponse.json({ error: 'invalid json' }, { status: 400 })
+    }
+
+    console.log('MCP JSON-RPC parsed payload:', JSON.stringify(payload))
+
+    const { method, params, id, jsonrpc } = payload || {}
+
+    if (jsonrpc && jsonrpc !== '2.0') {
+      console.warn('MCP JSON-RPC unexpected version:', jsonrpc)
+    }
+
+    const rpcResponse = (resultBody: any) => NextResponse.json({ jsonrpc: '2.0', id: id ?? null, result: resultBody })
+
+    if (method === 'initialize') {
+      const handshake = {
+        name: 'momoyo-ai-mcp',
+        version: '1.0.0',
+        tools: [
+          { name: 'getProfile', description: 'Returns the profile information from database' },
+          { name: 'getCareer', description: 'Returns resume / career entries' },
+          { name: 'getSkills', description: 'Returns skill list' },
+        ],
+      }
+      console.log('MCP initialize ->', handshake)
+      return rpcResponse(handshake)
+    }
+
+    if (method === 'tools/list') {
+      const tools = [
+        { name: 'getProfile', description: 'Returns the profile information from database' },
+        { name: 'getCareer', description: 'Returns resume / career entries' },
+        { name: 'getSkills', description: 'Returns skill list' },
+      ]
+      console.log('MCP tools/list ->', tools)
+      return rpcResponse({ tools })
+    }
+
+    if (method === 'tools/call') {
+      // Accept either params.message.toolCallList or params.toolCallList or a single toolCall in params
+      const toolCallList: any[] = params?.message?.toolCallList || params?.toolCallList || (params ? [params] : [])
+
+      if (!Array.isArray(toolCallList) || toolCallList.length === 0) {
+        console.warn('MCP tools/call missing toolCallList')
+        return NextResponse.json({ jsonrpc: '2.0', id: id ?? null, error: { code: -32602, message: 'invalid params' } }, { status: 400 })
+      }
+
+      // Execute each call and gather content entries
+      const content: Array<{ type: 'text'; text: string }> = []
+
+      for (const call of toolCallList) {
+        const callId = call?.id || call?.toolCallId || 'generated-1'
+        const fnName: string | undefined = call?.function?.name || call?.functionName || call?.name || params?.name
+
+        console.log('MCP tools/call executing', { callId, fnName })
+
+        if (!fnName) {
+          content.push({ type: 'text', text: JSON.stringify({ error: 'missing function name' }) })
+          continue
         }
-      }
-    } else {
-      try {
-        body = raw ? JSON.parse(raw) : {}
-      } catch (e) {
-        body = {}
-      }
-    }
 
-    console.log('MCP POST parsed body:', JSON.stringify(body))
-
-    // Vapi sends tool calls under message.toolCallList
-    const toolCallList: any[] = body?.message?.toolCallList || body?.toolCallList || body?.toolCalls || []
-
-    // Backcompat: if there's a single tool provided at top-level, convert to list
-    if (!toolCallList.length) {
-      const tool = body?.tool || body?.toolCall?.tool || body?.function?.name
-      const id = body?.toolCallId || body?.toolCall?.id || body?.id || 'generated-1'
-      if (tool) {
-        // normalize
-        toolCallList.push({ id, function: { name: tool, arguments: body?.arguments || '{}' } })
-      }
-    }
-
-    if (!toolCallList.length) {
-      console.warn('MCP POST missing toolCallList in body')
-      return NextResponse.json({ error: 'toolCallList required' }, { status: 400 })
-    }
-
-    const results: Array<{ toolCallId: string; result: string }> = []
-
-    for (const call of toolCallList) {
-      const id = call?.id || call?.toolCallId || 'generated-1'
-      const fnName: string | undefined = call?.function?.name || call?.functionName || call?.name
-      const argsRaw = call?.function?.arguments ?? call?.arguments ?? '{}'
-      let args: any = {}
-      if (typeof argsRaw === 'string') {
+        let toolResult: unknown
         try {
-          args = argsRaw ? JSON.parse(argsRaw) : {}
+          if (fnName === 'getProfile') toolResult = await getProfile()
+          else if (fnName === 'getCareer') toolResult = await getCareer()
+          else if (fnName === 'getSkills') toolResult = await getSkills()
+          else toolResult = { error: `unknown tool: ${fnName}` }
         } catch (e) {
-          args = {}
+          console.error('MCP tool execution error', e)
+          toolResult = { error: 'tool execution error', details: String(e) }
         }
-      } else {
-        args = argsRaw
+
+        const text = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult)
+        content.push({ type: 'text', text })
       }
 
-      console.log('MCP tool call:', { id, fnName, args })
-
-      if (!fnName) {
-        results.push({ toolCallId: id, result: JSON.stringify({ error: 'missing function name' }) })
-        continue
-      }
-
-      let toolResult: unknown
-      try {
-        if (fnName === 'getProfile') {
-          toolResult = await getProfile()
-        } else if (fnName === 'getCareer') {
-          toolResult = await getCareer()
-        } else if (fnName === 'getSkills') {
-          toolResult = await getSkills()
-        } else {
-          toolResult = { error: `unknown tool: ${fnName}` }
-        }
-      } catch (e) {
-        toolResult = { error: 'tool execution error', details: String(e) }
-      }
-
-      const toolResultStr = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult)
-      results.push({ toolCallId: id, result: toolResultStr })
+      const resultPayload = { content }
+      console.log('MCP tools/call result payload:', JSON.stringify(resultPayload))
+      return rpcResponse(resultPayload)
     }
 
-    const responsePayload = { results }
-    console.log('MCP POST response payload:', JSON.stringify(responsePayload))
-    return NextResponse.json(responsePayload)
+    console.warn('MCP JSON-RPC unknown method:', method)
+    return NextResponse.json({ jsonrpc: '2.0', id: id ?? null, error: { code: -32601, message: 'method not found' } }, { status: 404 })
   } catch (err) {
-    console.error('MCP route error', err)
+    console.error('MCP JSON-RPC route error', err)
     return NextResponse.json({ error: 'internal' }, { status: 500 })
   }
 }
