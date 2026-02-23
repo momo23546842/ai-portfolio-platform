@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import VapiWidget from "@/components/vapi/VapiWidget";
+import ThemeProvider from "@/components/theme-provider";
+import Script from 'next/script'
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -24,12 +26,22 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ja">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
-        <VapiWidget />
+        <Script
+          id="theme-init"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html:
+              `(function(){try{const t=localStorage.getItem('theme');if(t){document.documentElement.classList.remove('light','dark');document.documentElement.classList.add(t);document.documentElement.style.colorScheme = t === 'dark' ? 'dark' : 'light';}}catch(e){}})();`,
+          }}
+        />
+        <ThemeProvider>
+          {children}
+          <VapiWidget />
+        </ThemeProvider>
       </body>
     </html>
   );

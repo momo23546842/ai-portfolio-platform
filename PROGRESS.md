@@ -33,3 +33,9 @@
 - UIデザインはV0で作成予定（Next.js + Tailwindと相性が良い）
 - `npx` をつけないとprismaコマンドが動かない（Windows環境）
 - Windowsの一時フォルダ権限エラーは `$env:TEMP = "C:\Temp"` で解決
+
+### 未解決の問題
+- VapiのFunction CallingでツールはCompletedになるがLLMがデータを使えない
+- 原因：VapiがツールのレスポンスをLLMに正しく渡せていない可能性
+- 試したこと：レスポンスをラップ、モデル変更、システムプロンプト変更
+- 次回：Custom Functionsで試す、またはVapiのServerURLを使ったWebhook方式を検討
