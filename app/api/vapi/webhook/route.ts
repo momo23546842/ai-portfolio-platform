@@ -10,7 +10,7 @@ async function callGroqWithContext(prompt: string, dbContext: any) {
   if (!apiKey) throw new Error('GROQ_API_KEY not set')
 
   const groq = new Groq({ apiKey })
-  const systemContent = `You are Momoyo Kataoka's digital twin. USE ONLY the structured DB_CONTEXT provided below. Do NOT use external knowledge or training data for personal facts. DB_CONTEXT:${JSON.stringify(
+  const systemContent = `You are Momoyo Kataoka's digital twin. Answer ONLY based on the DB_CONTEXT provided. Do not use any outside knowledge. If information is not in DB_CONTEXT, say 'I cannot find this information.'\nDB_CONTEXT:${JSON.stringify(
     dbContext
   )}`
 
@@ -74,8 +74,7 @@ export async function POST(req: NextRequest) {
       skills = await prisma.skill.findMany()
     } catch (dbErr) {
       console.error('DB query failed', dbErr)
-      // Per requirement: return HTTP 200 with an explicit message
-      return NextResponse.json({ response: { message: { role: 'assistant', content: 'I cannot find this information in the database.' } } })
+      return NextResponse.json({ response: { message: { role: 'assistant', content: 'I cannot find this information.' } } })
     }
 
     const DB_CONTEXT = {
@@ -86,7 +85,7 @@ export async function POST(req: NextRequest) {
 
     // If there's no data to answer, respond explicitly per rule
     if (!profile && career.length === 0 && skills.length === 0) {
-      return NextResponse.json({ response: { message: { role: 'assistant', content: 'I cannot find this information in the database.' } } })
+      return NextResponse.json({ response: { message: { role: 'assistant', content: 'I cannot find this information.' } } })
     }
 
     // Extract user's prompt from webhook payload
@@ -98,7 +97,7 @@ export async function POST(req: NextRequest) {
       replyText = await callGroqWithContext(String(userMessage || ''), DB_CONTEXT)
     } catch (e) {
       console.error('Groq call failed in webhook', e)
-      return NextResponse.json({ response: { message: { role: 'assistant', content: 'I cannot find this information in the database.' } } })
+      return NextResponse.json({ response: { message: { role: 'assistant', content: 'I cannot find this information.' } } })
     }
 
     const responsePayload = { response: { message: { role: 'assistant', content: replyText } } }
