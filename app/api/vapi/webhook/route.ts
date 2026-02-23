@@ -244,31 +244,65 @@ export async function POST(req: NextRequest) {
     const messageRole = payload?.message?.role || ''
     const trimmedUserMessage = String(userMessage || '').trim()
 
-    // Consider artifact arrays: some Vapi events set top-level role to
-    // 'assistant' while embedding the most recent user utterance inside
-    // artifact.messagesOpenAIFormatted or artifact.messages. Treat the
-    // event as user-driven if either the top-level role is 'user' OR the
-    // artifact contains a user message.
-    let hasUserInArtifact = false
+    // Scan artifact arrays to determine if there's an embedded user prompt.
+    // Prefer messagesOpenAIFormatted, then artifact.messages.
+    let artifactUserPrompt = ''
     try {
       const formatted = payload?.message?.artifact?.messagesOpenAIFormatted
       if (Array.isArray(formatted) && formatted.length > 0) {
-        hasUserInArtifact = formatted.some((itm: any) => itm?.role === 'user' && itm?.content)
+        for (let i = formatted.length - 1; i >= 0; i--) {
+          const itm = formatted[i]
+          if (itm?.role === 'user' && itm?.content) {
+            artifactUserPrompt = String(itm.content)
+            break
+          }
+        }
       }
-      if (!hasUserInArtifact) {
+      if (!artifactUserPrompt) {
         const msgs = payload?.message?.artifact?.messages
         if (Array.isArray(msgs) && msgs.length > 0) {
-          hasUserInArtifact = msgs.some((itm: any) => itm?.role === 'user' && (typeof itm?.message === 'string' ? itm.message : (itm?.message?.message || itm?.message?.text)))
+          for (let i = msgs.length - 1; i >= 0; i--) {
+            const itm = msgs[i]
+            if (itm?.role === 'user') {
+              const body = itm?.message
+              if (typeof body === 'string') artifactUserPrompt = body
+              else if (body && typeof body === 'object') artifactUserPrompt = body.message || body.text || ''
+              if (artifactUserPrompt) break
+            }
+          }
         }
       }
     } catch (e) {
-      console.warn('Error while checking artifact for user message', e)
+      console.warn('Error while extracting user prompt from artifact', e)
     }
 
-    if (!(msgType === 'speech-update' && msgStatus === 'stopped' && (messageRole === 'user' || hasUserInArtifact) && trimmedUserMessage)) {
-      console.log('Skipping MCP/Groq: not a final user speech with content (type:', msgType, 'status:', msgStatus, 'role:', messageRole, 'hasUserInArtifact:', hasUserInArtifact, ')')
-      const safe = '...'
-      return NextResponse.json({ response: { message: { role: 'assistant', content: safe } }, messageResponse: { message: { role: 'assistant', content: safe } } })
+    const hasUserPrompt = Boolean(trimmedUserMessage || (artifactUserPrompt && String(artifactUserPrompt).trim()))
+
+    // Early guard: if top-level role is assistant and there's no user prompt,
+    // short-circuit immediately to avoid assistant->assistant loops.
+    if (messageRole === 'assistant' && !hasUserPrompt) {
+      console.log('Short-circuit: payload role=assistant and no user prompt found; skipping MCP/Groq (type:', msgType, 'status:', msgStatus, ')')
+      const empty = ''
+      return NextResponse.json({ response: { message: { role: 'assistant', content: empty } }, messageResponse: { message: { role: 'assistant', content: empty } } })
+    }
+
+    // Allow processing for either speech-update or conversation-update when
+    // a user prompt exists (from top-level or artifact). If no prompt, return
+    // empty content without calling MCP/Groq.
+    const allowedTypes = ['speech-update', 'conversation-update']
+    if (!allowedTypes.includes(msgType) || !hasUserPrompt) {
+      console.log('Skipping MCP/Groq: reason:', { type: msgType, status: msgStatus, role: messageRole, hasUserPrompt })
+      const empty = ''
+      return NextResponse.json({ response: { message: { role: 'assistant', content: empty } }, messageResponse: { message: { role: 'assistant', content: empty } } })
+    }
+
+    // If artifact had the user prompt but our earlier `userMessage` was empty,
+    // populate `userMessage` now from artifactUserPrompt so downstream logic
+    // uses the intended prompt.
+    if (!trimmedUserMessage && artifactUserPrompt) {
+      userMessage = String(artifactUserPrompt)
+      userMessageSource = 'artifactUserPrompt-populated'
+      console.log('Populated userMessage from artifactUserPrompt')
     }
 
     // MCP helper: call the local MCP JSON-RPC /api/mcp endpoint
