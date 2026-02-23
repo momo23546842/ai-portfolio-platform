@@ -1,28 +1,81 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Groq from 'groq-sdk'
 
-const GROQ_MODEL = 'llama-3.3-70b-versatile'
+const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant'
 
 // Call Groq with a structured DB_CONTEXT provided as a system message.
 async function callGroqWithContext(prompt: string, dbContext: any) {
   const apiKey = process.env.GROQ_API_KEY
   if (!apiKey) throw new Error('GROQ_API_KEY not set')
 
+  const model = process.env.GROQ_MODEL || GROQ_MODEL
+  console.log('Using Groq model:', model)
+
   const groq = new Groq({ apiKey })
   const systemContent = `You are Momoyo Kataoka's digital twin. Answer using ONLY DB_CONTEXT. If missing, say 'I cannot find this information in the database.'\nDB_CONTEXT:${JSON.stringify(
     dbContext
   )}`
 
-  const response = await groq.chat.completions.create({
-    model: GROQ_MODEL,
-    messages: [
-      { role: 'system', content: systemContent },
-      { role: 'user', content: prompt },
-    ],
-  })
+  try {
+    const response = await groq.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: systemContent },
+        { role: 'user', content: prompt },
+      ],
+    })
 
-  const reply = response?.choices?.[0]?.message?.content ?? JSON.stringify(response)
-  return String(reply)
+    const reply = response?.choices?.[0]?.message?.content ?? JSON.stringify(response)
+    return String(reply)
+  } catch (err: any) {
+    // Handle rate limit (429) gracefully by returning a deterministic fallback
+    const status = err?.status || err?.statusCode || err?.code
+    const message = err?.message || String(err)
+    console.error('Groq call error:', status, message)
+    if (status === 429 || String(message).toLowerCase().includes('rate_limit') || String(message).toLowerCase().includes('rate limit') || String(message).toLowerCase().includes('rate_limit_exceeded')) {
+      console.warn('Groq rate limit detected; returning deterministic fallback from DB_CONTEXT')
+      // Build a deterministic reply from DB_CONTEXT (no LLM)
+      try {
+        const profile = dbContext?.profile ?? {}
+        const career = Array.isArray(dbContext?.career) ? dbContext.career : []
+
+        // top work items (prefer items without type 'education')
+        const workItems = career.filter((c: any) => (c?.type || '').toLowerCase() !== 'education')
+        const topWork = workItems.slice(0, 3)
+
+        // top education item
+        const educationItem = career.find((c: any) => (c?.type || '').toLowerCase() === 'education') || career[0] || null
+
+        let parts: string[] = []
+        if (profile?.name) parts.push(String(profile.name))
+        if (profile?.catchphrase) parts.push(String(profile.catchphrase))
+        if (profile?.bio) parts.push(String(profile.bio))
+
+        if (topWork.length > 0) {
+          parts.push('Top roles:')
+          for (const item of topWork) {
+            const title = item?.title || item?.position || item?.role || ''
+            const org = item?.company || item?.organization || ''
+            parts.push(`${title}${org ? ' at ' + org : ''}`.trim())
+          }
+        }
+
+        if (educationItem) {
+          const edu = educationItem?.title || educationItem?.degree || educationItem?.school || ''
+          if (edu) parts.push(`Education: ${edu}`)
+        }
+
+        const fallback = parts.join('\n') || "I cannot find this information in the database."
+        return fallback
+      } catch (fallbackErr) {
+        console.error('Error building fallback reply from DB_CONTEXT', fallbackErr)
+        return "I cannot find this information in the database."
+      }
+    }
+
+    // Re-throw non-rate-limit errors to be handled by caller
+    throw err
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -123,9 +176,34 @@ export async function POST(req: NextRequest) {
 
     const DB_CONTEXT = { profile: parsedProfile ?? null, career: parsedCareer ?? [], skills: parsedSkills ?? [] }
 
+    // Trim DB_CONTEXT to reduce token usage: career top 3, skills top 20, truncate long strings
+    function truncateString(s: any, max = 200) {
+      if (typeof s !== 'string') return s
+      return s.length > max ? s.slice(0, max) + '…' : s
+    }
+
+    function trimItemStrings(item: any) {
+      if (!item || typeof item !== 'object') return item
+      const out: any = {}
+      for (const k of Object.keys(item)) {
+        const v = item[k]
+        if (typeof v === 'string') out[k] = truncateString(v, 200)
+        else out[k] = v
+      }
+      return out
+    }
+
+    const trimmedCareer = Array.isArray(DB_CONTEXT.career) ? DB_CONTEXT.career.slice(0, 3).map(trimItemStrings) : []
+    let trimmedSkills: any[] = []
+    if (Array.isArray(DB_CONTEXT.skills)) {
+      trimmedSkills = DB_CONTEXT.skills.slice(0, 20).map((s: any) => (typeof s === 'string' ? truncateString(s, 200) : trimItemStrings(s)))
+    }
+
+    const trimmedContext = { profile: DB_CONTEXT.profile ? trimItemStrings(DB_CONTEXT.profile) : null, career: trimmedCareer, skills: trimmedSkills }
+
     // Log DB_CONTEXT truncated before calling Groq
     try {
-      console.log('DB_CONTEXT:', JSON.stringify(DB_CONTEXT).slice(0, 2000))
+      console.log('DB_CONTEXT:', JSON.stringify(trimmedContext).slice(0, 2000))
     } catch (e) {
       console.log('DB_CONTEXT: <unserializable>')
     }
@@ -138,9 +216,10 @@ export async function POST(req: NextRequest) {
     // Call LLM with strict DB_CONTEXT
     let replyText: string
     try {
-      replyText = await callGroqWithContext(String(userMessage || ''), DB_CONTEXT)
-    } catch (e) {
+      replyText = await callGroqWithContext(String(userMessage || ''), trimmedContext)
+    } catch (e: any) {
       console.error('Groq call failed in webhook', e)
+      // If non-rate-limit error propagated, fall back to deterministic message
       return NextResponse.json({ response: { message: { role: 'assistant', content: 'I cannot find this information in the database.' } } })
     }
 
