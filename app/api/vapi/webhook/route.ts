@@ -3,6 +3,52 @@ import Groq from 'groq-sdk'
 
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant'
 
+// Short, voice-friendly deterministic reply builder used when the LLM
+// must be bypassed. Keeps replies concise (2-4 short sentences) and
+// follows persona rules (first person, no system/tool references).
+function buildShortDeterministicReply(dbContext: any) {
+  const missing = 'I cannot find this information in the database.'
+  try {
+    const profile = dbContext?.profile ?? {}
+    const career = Array.isArray(dbContext?.career) ? dbContext.career : []
+
+    const name = profile?.name ? String(profile.name).trim() : ''
+    const catchphrase = profile?.catchphrase ? String(profile.catchphrase).trim() : ''
+    const bio = profile?.bio ? String(profile.bio).replace(/\s+/g, ' ').trim() : ''
+
+    const workItems = career.filter((c: any) => (c?.type || '').toLowerCase() !== 'education')
+    const topWork = workItems.slice(0, 2).map((item: any) => {
+      const title = item?.title || item?.position || item?.role || ''
+      const org = item?.company || item?.organization || ''
+      const s = `${title}${org ? ' at ' + org : ''}`.trim()
+      return s
+    }).filter(Boolean)
+
+    // If there's essentially no DB info, return the exact missing-info sentence.
+    const hasAny = Boolean(name || catchphrase || bio || topWork.length > 0)
+    if (!hasAny) return missing
+
+    const parts: string[] = []
+    if (name) parts.push(`I'm ${name}.`)
+    if (catchphrase) parts.push(`${catchphrase}.`)
+    if (bio) {
+      const bioShort = bio.length > 180 ? bio.slice(0, 177).trim() + '…' : bio
+      parts.push(`${bioShort}.`)
+    }
+    if (topWork.length > 0) {
+      if (topWork.length === 1) parts.push(`I have experience as ${topWork[0]}.`)
+      else parts.push(`I have experience as ${topWork[0]} and ${topWork[1]}.`)
+    }
+
+    // Keep total reply short: join and then truncate to ~420 chars if needed
+    const reply = parts.join(' ').replace(/\s+/g, ' ').trim()
+    return reply.length > 420 ? reply.slice(0, 417).trim() + '…' : reply
+  } catch (e) {
+    console.error('Error building short deterministic reply', e)
+    return 'I cannot find this information in the database.'
+  }
+}
+
 // Call Groq with a structured DB_CONTEXT provided as a system message.
 async function callGroqWithContext(prompt: string, dbContext: any, language = 'en') {
   const apiKey = process.env.GROQ_API_KEY
@@ -14,7 +60,7 @@ async function callGroqWithContext(prompt: string, dbContext: any, language = 'e
   const groq = new Groq({ apiKey })
   // Strong system prompt derived from AGENT.md: speak as Momoyo, follow privacy rules,
   // answer only from DB_CONTEXT, and respond in the visitor's language.
-  const personaInstructions = `You are Momoyo Kataoka's digital twin. Speak as Momoyo — warm, professional, and enthusiastic. Use the visitor's language (Japanese or English) consistently. Answer using ONLY the provided DB_CONTEXT. Do NOT invent or assume facts not present in DB_CONTEXT. Never reveal private information such as personal address, phone number, personal email, salary, bank details, passwords, or family information. If the DB_CONTEXT lacks the requested information, respond with: "I cannot find this information in the database." Offer to direct the visitor to the contact form or to book a meeting when appropriate. For booking flows, call the server booking tools (checkAvailability/createBooking) instead of providing private scheduling details. IMPORTANT: Do NOT mention being an AI, a language model, Groq, Vapi, or internal tools. Never say phrases like "as an AI" or "as a language model". Speak in first person as Momoyo ("I", not "the assistant").`
+  const personaInstructions = `You are Momoyo Kataoka's digital twin. Speak as Momoyo — warm, professional, and enthusiastic. Use the visitor's language (Japanese or English) consistently. Answer using ONLY the provided DB_CONTEXT. Do NOT invent or assume facts not present in DB_CONTEXT. Never reveal private information such as personal address, phone number, personal email, salary, bank details, passwords, or family information. If the DB_CONTEXT lacks the requested information, respond with: "I cannot find this information in the database." Offer to direct the visitor to the contact form or to book a meeting when appropriate. For booking flows, call the server booking tools (checkAvailability/createBooking) instead of providing private scheduling details. IMPORTANT: Do NOT mention you are an AI, a language model, Groq, Vapi, tools, or databases. Never say phrases like "as an AI" or "as a language model". Speak in first person as Momoyo ("I", not "the assistant").`
 
   const langInstruction = language === 'ja' ? '\nRespond in Japanese.' : '\nRespond in English.'
 
@@ -67,43 +113,13 @@ async function callGroqWithContext(prompt: string, dbContext: any, language = 'e
         console.error('Error during Groq retry wait', retryErr)
       }
 
-      // fallback deterministic reply from DB_CONTEXT
-      console.warn('Groq rate limit fallback: returning deterministic reply from DB_CONTEXT')
+      // fallback deterministic reply from DB_CONTEXT (short, voice-friendly)
+      console.warn('Groq rate limit fallback: returning short deterministic reply from DB_CONTEXT')
       try {
-        const profile = dbContext?.profile ?? {}
-        const career = Array.isArray(dbContext?.career) ? dbContext.career : []
-
-        // top work items (prefer items without type 'education')
-        const workItems = career.filter((c: any) => (c?.type || '').toLowerCase() !== 'education')
-        const topWork = workItems.slice(0, 3)
-
-        // top education item
-        const educationItem = career.find((c: any) => (c?.type || '').toLowerCase() === 'education') || career[0] || null
-
-        let parts: string[] = []
-        if (profile?.name) parts.push(String(profile.name))
-        if (profile?.catchphrase) parts.push(String(profile.catchphrase))
-        if (profile?.bio) parts.push(String(profile.bio))
-
-        if (topWork.length > 0) {
-          parts.push('Top roles:')
-          for (const item of topWork) {
-            const title = item?.title || item?.position || item?.role || ''
-            const org = item?.company || item?.organization || ''
-            parts.push(`${title}${org ? ' at ' + org : ''}`.trim())
-          }
-        }
-
-        if (educationItem) {
-          const edu = educationItem?.title || educationItem?.degree || educationItem?.school || ''
-          if (edu) parts.push(`Education: ${edu}`)
-        }
-
-        const fallback = parts.join('\n') || "I cannot find this information in the database."
-        return fallback
+        return buildShortDeterministicReply(dbContext)
       } catch (fallbackErr) {
         console.error('Error building fallback reply from DB_CONTEXT', fallbackErr)
-        return "I cannot find this information in the database."
+        return 'I cannot find this information in the database.'
       }
     }
 
@@ -182,11 +198,48 @@ export async function POST(req: NextRequest) {
     // Short-circuit for non-final webhook events: avoid MCP/Groq on partial updates.
     const msgType = payload?.message?.type || ''
     const msgStatus = payload?.message?.status || ''
-    // If this is not a final user speech update, return 200 quickly with empty assistant content.
+    // If this is not a final user speech update, skip MCP/Groq but return
+    // a valid assistant message so Vapi doesn't fall back to its own model.
+    // Prefer repeating the last assistant message from the payload; if none
+    // is available, return a minimal neutral message '...'.
     if (msgType !== 'speech-update' || (msgStatus && msgStatus !== 'stopped' && msgStatus !== 'final')) {
       console.log('Non-final Vapi event received (type:', msgType, 'status:', msgStatus, '); skipping MCP/Groq')
-      const empty = ''
-      return NextResponse.json({ response: { message: { role: 'assistant', content: empty } }, messageResponse: { message: { role: 'assistant', content: empty } } })
+
+      // Attempt to find the last assistant message in the artifact arrays
+      let lastAssistant = ''
+      try {
+        const formatted = payload?.message?.artifact?.messagesOpenAIFormatted
+        if (Array.isArray(formatted) && formatted.length > 0) {
+          for (let i = formatted.length - 1; i >= 0; i--) {
+            const itm = formatted[i]
+            if (itm?.role === 'assistant' && itm?.content) {
+              lastAssistant = String(itm.content)
+              break
+            }
+          }
+        }
+
+        if (!lastAssistant) {
+          const msgs = payload?.message?.artifact?.messages
+          if (Array.isArray(msgs) && msgs.length > 0) {
+            for (let i = msgs.length - 1; i >= 0; i--) {
+              const itm = msgs[i]
+              if (itm?.role === 'assistant') {
+                const body = itm?.message
+                if (typeof body === 'string') lastAssistant = body
+                else if (body && typeof body === 'object') lastAssistant = body.message || body.text || ''
+                if (lastAssistant) break
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Error extracting last assistant message from payload', e)
+      }
+
+      if (!lastAssistant) lastAssistant = '...'
+
+      return NextResponse.json({ response: { message: { role: 'assistant', content: lastAssistant } }, messageResponse: { message: { role: 'assistant', content: lastAssistant } } })
     }
 
     // MCP helper: call the local MCP JSON-RPC /api/mcp endpoint
@@ -346,38 +399,7 @@ export async function POST(req: NextRequest) {
     }
 
     function deterministicReplyFromContext(dbContext: any) {
-      try {
-        const profile = dbContext?.profile ?? {}
-        const career = Array.isArray(dbContext?.career) ? dbContext.career : []
-
-        const workItems = career.filter((c: any) => (c?.type || '').toLowerCase() !== 'education')
-        const topWork = workItems.slice(0, 3)
-        const educationItem = career.find((c: any) => (c?.type || '').toLowerCase() === 'education') || career[0] || null
-
-        const parts: string[] = []
-        if (profile?.name) parts.push(String(profile.name))
-        if (profile?.catchphrase) parts.push(String(profile.catchphrase))
-        if (profile?.bio) parts.push(String(profile.bio))
-
-        if (topWork.length > 0) {
-          parts.push('Top roles:')
-          for (const item of topWork) {
-            const title = item?.title || item?.position || item?.role || ''
-            const org = item?.company || item?.organization || ''
-            parts.push(`${title}${org ? ' at ' + org : ''}`.trim())
-          }
-        }
-
-        if (educationItem) {
-          const edu = educationItem?.title || educationItem?.degree || educationItem?.school || ''
-          if (edu) parts.push(`Education: ${edu}`)
-        }
-
-        return parts.join('\n') || 'I cannot find this information in the database.'
-      } catch (e) {
-        console.error('Error building deterministic fallback', e)
-        return 'I cannot find this information in the database.'
-      }
+      return buildShortDeterministicReply(dbContext)
     }
 
     try {
@@ -434,16 +456,18 @@ export async function POST(req: NextRequest) {
             'as a language model',
             'i do not have access',
             'i have no access',
-            'i can',
-            "i'm able to",
             'groq',
             'vapi',
             'tools',
-            'database'
+            'mcp',
+            'db_context',
+            'database context'
           ]
         const low = String(replyText || '').toLowerCase()
-        if (forbiddenPatterns.some((p) => low.includes(p))) {
-          console.warn('Groq reply referenced being an AI or lack of access; replacing with deterministic DB reply')
+        const missingInfoExact = 'i cannot find this information in the database.'
+        // If the reply is exactly the standardized missing-info sentence, allow it.
+        if (low.trim() !== missingInfoExact && forbiddenPatterns.some((p) => low.includes(p))) {
+          console.warn('Groq reply referenced being an AI or internal system; replacing with deterministic DB reply')
           replyText = deterministicReplyFromContext(trimmedContext)
         }
       } catch (e) {
