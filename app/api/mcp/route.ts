@@ -58,56 +58,96 @@ async function getSkills() {
 export async function POST(req: Request) {
   try {
     const contentType = req.headers.get('content-type') || ''
+
+    // Always read raw text so we can log exactly what Vapi sends.
+    const raw = await req.text()
+    console.log('MCP POST raw request text:', raw)
+
     let body: any = {}
     if (contentType.includes('application/json')) {
-      body = await req.json()
-    } else {
-      const txt = await req.text()
       try {
-        body = txt ? JSON.parse(txt) : {}
+        body = raw ? JSON.parse(raw) : {}
+      } catch (e) {
+        // Fallback to req.json() if parsing failed
+        try {
+          body = await req.json()
+        } catch (e2) {
+          body = {}
+        }
+      }
+    } else {
+      try {
+        body = raw ? JSON.parse(raw) : {}
       } catch (e) {
         body = {}
       }
     }
 
-    // Log incoming request for debugging
-    console.log('MCP POST request body:', JSON.stringify(body))
+    console.log('MCP POST parsed body:', JSON.stringify(body))
 
-    // Support multiple request shapes. Prefer explicit tool and toolCallId.
-    const tool = (body?.tool as ToolName) || body?.toolCall?.tool || body?.toolCall?.toolName
-    const toolCallId = body?.toolCallId || body?.toolCall?.id || body?.toolCall?.toolCallId || body?.id || body?.toolCall?.toolCallId || null
+    // Vapi sends tool calls under message.toolCallList
+    const toolCallList: any[] = body?.message?.toolCallList || body?.toolCallList || body?.toolCalls || []
 
-    if (!tool) {
-      console.warn('MCP POST missing tool in body')
-      return NextResponse.json({ error: 'tool required' }, { status: 400 })
+    // Backcompat: if there's a single tool provided at top-level, convert to list
+    if (!toolCallList.length) {
+      const tool = body?.tool || body?.toolCall?.tool || body?.function?.name
+      const id = body?.toolCallId || body?.toolCall?.id || body?.id || 'generated-1'
+      if (tool) {
+        // normalize
+        toolCallList.push({ id, function: { name: tool, arguments: body?.arguments || '{}' } })
+      }
     }
 
-    let result: unknown
-    if (tool === 'getProfile') {
-      result = await getProfile()
-    } else if (tool === 'getCareer') {
-      result = await getCareer()
-    } else if (tool === 'getSkills') {
-      result = await getSkills()
-    } else {
-      console.warn('MCP POST unknown tool:', tool)
-      return NextResponse.json({ error: `unknown tool: ${tool}` }, { status: 400 })
+    if (!toolCallList.length) {
+      console.warn('MCP POST missing toolCallList in body')
+      return NextResponse.json({ error: 'toolCallList required' }, { status: 400 })
     }
 
-    const resultStr = typeof result === 'string' ? result : JSON.stringify(result)
+    const results: Array<{ toolCallId: string; result: string }> = []
 
-    const responsePayload = {
-      results: [
-        {
-          toolCallId: toolCallId ?? 'generated-1',
-          result: resultStr,
-        },
-      ],
+    for (const call of toolCallList) {
+      const id = call?.id || call?.toolCallId || 'generated-1'
+      const fnName: string | undefined = call?.function?.name || call?.functionName || call?.name
+      const argsRaw = call?.function?.arguments ?? call?.arguments ?? '{}'
+      let args: any = {}
+      if (typeof argsRaw === 'string') {
+        try {
+          args = argsRaw ? JSON.parse(argsRaw) : {}
+        } catch (e) {
+          args = {}
+        }
+      } else {
+        args = argsRaw
+      }
+
+      console.log('MCP tool call:', { id, fnName, args })
+
+      if (!fnName) {
+        results.push({ toolCallId: id, result: JSON.stringify({ error: 'missing function name' }) })
+        continue
+      }
+
+      let toolResult: unknown
+      try {
+        if (fnName === 'getProfile') {
+          toolResult = await getProfile()
+        } else if (fnName === 'getCareer') {
+          toolResult = await getCareer()
+        } else if (fnName === 'getSkills') {
+          toolResult = await getSkills()
+        } else {
+          toolResult = { error: `unknown tool: ${fnName}` }
+        }
+      } catch (e) {
+        toolResult = { error: 'tool execution error', details: String(e) }
+      }
+
+      const toolResultStr = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult)
+      results.push({ toolCallId: id, result: toolResultStr })
     }
 
+    const responsePayload = { results }
     console.log('MCP POST response payload:', JSON.stringify(responsePayload))
-
-    // Return JSON response (not streaming) in MCP expected format
     return NextResponse.json(responsePayload)
   } catch (err) {
     console.error('MCP route error', err)
