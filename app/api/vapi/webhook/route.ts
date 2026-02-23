@@ -179,6 +179,16 @@ export async function POST(req: NextRequest) {
     }
     console.log('Resolved userMessage source:', userMessageSource)
 
+    // Short-circuit for non-final webhook events: avoid MCP/Groq on partial updates.
+    const msgType = payload?.message?.type || ''
+    const msgStatus = payload?.message?.status || ''
+    // If this is not a final user speech update, return 200 quickly with empty assistant content.
+    if (msgType !== 'speech-update' || (msgStatus && msgStatus !== 'stopped' && msgStatus !== 'final')) {
+      console.log('Non-final Vapi event received (type:', msgType, 'status:', msgStatus, '); skipping MCP/Groq')
+      const empty = ''
+      return NextResponse.json({ response: { message: { role: 'assistant', content: empty } }, messageResponse: { message: { role: 'assistant', content: empty } } })
+    }
+
     // MCP helper: call the local MCP JSON-RPC /api/mcp endpoint
     async function callMcpTool(toolName: string, userIdArg: string) {
       try {
@@ -284,13 +294,27 @@ export async function POST(req: NextRequest) {
       console.log('DB_CONTEXT: <unserializable>')
     }
 
-    // If there's no data, respond with the standardized missing-info message
+    // If there's no data at all, respond with the standardized missing-info message
     if (!DB_CONTEXT.profile && (!DB_CONTEXT.career || DB_CONTEXT.career.length === 0) && (!DB_CONTEXT.skills || DB_CONTEXT.skills.length === 0)) {
       const content = 'I cannot find this information in the database.'
       return NextResponse.json({
         response: { message: { role: 'assistant', content } },
         messageResponse: { message: { role: 'assistant', content } },
       })
+    }
+
+    // Heuristic: if the user's request is about background/profile and DB lacks profile.bio and career, skip LLM and return missing-info
+    try {
+      const asksForBackground = /\b(background|about you|your background|bio|experience|career|work history|what did you do)\b/i.test(String(userMessage || ''))
+      const hasProfileInfo = Boolean(trimmedContext.profile && (trimmedContext.profile.bio || trimmedContext.profile.catchphrase))
+      const hasCareerInfo = Array.isArray(trimmedContext.career) && trimmedContext.career.length > 0
+      if (asksForBackground && !hasProfileInfo && !hasCareerInfo) {
+        const content = 'I cannot find this information in the database.'
+        console.log('Skipping LLM: background requested but DB_CONTEXT lacks profile/career')
+        return NextResponse.json({ response: { message: { role: 'assistant', content } }, messageResponse: { message: { role: 'assistant', content } } })
+      }
+    } catch (e) {
+      console.warn('Error while checking DB sufficiency for userMessage', e)
     }
 
     // Test-only: allow forcing deterministic fallback via header, but only
@@ -401,16 +425,22 @@ export async function POST(req: NextRequest) {
       // Output guard: prevent the model from referring to itself or internal systems.
       try {
         const forbiddenPatterns = [
-          'as an ai',
-          "i am an ai",
-          "i'm an ai",
-          'language model',
-          'i cannot access',
-          "i don't have access",
-          'as a language model',
-          'i do not have access',
-          'i have no access'
-        ]
+            'as an ai',
+            "i am an ai",
+            "i'm an ai",
+            'language model',
+            'i cannot access',
+            "i don't have access",
+            'as a language model',
+            'i do not have access',
+            'i have no access',
+            'i can',
+            "i'm able to",
+            'groq',
+            'vapi',
+            'tools',
+            'database'
+          ]
         const low = String(replyText || '').toLowerCase()
         if (forbiddenPatterns.some((p) => low.includes(p))) {
           console.warn('Groq reply referenced being an AI or lack of access; replacing with deterministic DB reply')
