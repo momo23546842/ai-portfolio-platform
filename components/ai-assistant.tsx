@@ -127,20 +127,6 @@ export function AiAssistant() {
 
       await vapiRef.current.start({
         assistantId: process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID,
-        transcriber: {
-          provider: 'deepgram',
-          model: 'nova-2',
-          language: 'en-US',
-        },
-        model: {
-          provider: 'groq',
-          model: 'llama-3.3-70b-versatile',
-          systemPrompt: systemPrompt,
-        },
-        voice: {
-          provider: '11labs',
-          voiceId: String(process.env.NEXT_PUBLIC_ELEVENLABS_VOICE_ID),
-        },
       })
       setIsCallActive(true)
 
