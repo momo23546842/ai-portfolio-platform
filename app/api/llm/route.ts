@@ -301,12 +301,6 @@ export async function POST(req: NextRequest) {
     // with the standardized missing-info sentence so callers (like Vapi)
     // receive a usable response rather than a 5xx error.
     const now = Math.floor(Date.now() / 1000)
-    const isStream = (body as any)?.stream === true
-    if (isStream) {
-      const chunk = { id: `chatcmpl_${now}`, object: 'chat.completion.chunk', created: now, model: 'custom', choices: [{ index: 0, delta: { role: 'assistant', content: MISSING_INFO_EXACT }, finish_reason: 'stop' }] }
-      const streamBody = `data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`
-      return new Response(streamBody, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } })
-    }
     return NextResponse.json({ id: `chatcmpl_${now}`, object: 'chat.completion', created: now, model: 'custom', choices: [{ index: 0, message: { role: 'assistant', content: MISSING_INFO_EXACT }, finish_reason: 'stop' }], usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 } })
   }
 }
