@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Send, Mic, Phone, PhoneOff, MessageCircle } from "lucide-react"
+import { Send, Mic, Phone, PhoneOff, MessageCircle, CalendarDays } from "lucide-react"
 
 interface Message {
   id: string
@@ -16,7 +16,7 @@ export function AiAssistant() {
     {
       id: "welcome",
       role: "assistant",
-      content: "Hi! I'm Momoyo's AI assistant. Feel free to ask me anything about her background, skills, or how to get in touch.",
+      content: "Hi! I'm Momoyo's AI assistant. Feel free to ask me anything about her background, skills, or how to get in touch. You can also book a meeting with her right from this chat!",
     },
   ])
   const [isCallActive, setIsCallActive] = useState(false)
@@ -38,10 +38,39 @@ export function AiAssistant() {
     isCallActiveRef.current = isCallActive
   }, [isCallActive])
 
+  // Render message content, converting [BOOKING_LINK] to a button
+  const renderMessageContent = (content: string) => {
+    if (!content.includes("[BOOKING_LINK]")) {
+      return <span>{content}</span>
+    }
+
+    const parts = content.split("[BOOKING_LINK]")
+    return (
+      <>
+        <span>{parts[0]}</span>
+        <button
+          onClick={() => {
+            const bookingSection = document.getElementById("booking")
+            if (bookingSection) {
+              bookingSection.scrollIntoView({ behavior: "smooth" })
+            }
+          }}
+          className="mt-3 flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-medium text-primary-foreground shadow-md shadow-primary/20 hover:brightness-110 transition-all"
+        >
+          <CalendarDays className="h-3.5 w-3.5" />
+          Open Booking Calendar
+        </button>
+        {parts[1] && <span>{parts[1]}</span>}
+      </>
+    )
+  }
+
   const speak = (text: string, onEnd?: () => void) => {
     if (!window.speechSynthesis) return
     window.speechSynthesis.cancel()
-    const utterance = new SpeechSynthesisUtterance(text)
+    // Strip [BOOKING_LINK] from spoken text
+    const cleanText = text.replace(/\[BOOKING_LINK\]/g, ". You can find the booking calendar on this page.")
+    const utterance = new SpeechSynthesisUtterance(cleanText)
     utterance.rate = 1.0
     utterance.pitch = 1.1
     utterance.lang = "en-US"
@@ -79,7 +108,7 @@ export function AiAssistant() {
     recognition.onresult = async (event: any) => {
       const transcript = event.results[0][0].transcript
       setIsListening(false)
-      setCallStatus(`You: "${transcript}"`)
+      setCallStatus(`You: \"${transcript}\"`)
       setMessages(prev => [...prev, { id: Date.now().toString(), role: "user", content: transcript }])
       setCallStatus("Momoyo is thinking...")
 
@@ -92,13 +121,29 @@ export function AiAssistant() {
         const data = await res.json()
         const reply = data.reply
         setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: "assistant", content: reply }])
-        setCallStatus("Momoyo is speaking...")
-        speak(reply, () => {
-          if (isCallActiveRef.current) {
-            setCallStatus("Your turn — speak now")
-            startListening()
-          }
-        })
+
+        // If booking link detected in voice call, scroll to booking
+        if (reply.includes("[BOOKING_LINK]")) {
+          setCallStatus("Momoyo is speaking... (Booking calendar is below!)")
+          speak(reply, () => {
+            const bookingSection = document.getElementById("booking")
+            if (bookingSection) {
+              bookingSection.scrollIntoView({ behavior: "smooth" })
+            }
+            if (isCallActiveRef.current) {
+              setCallStatus("Your turn — speak now")
+              startListening()
+            }
+          })
+        } else {
+          setCallStatus("Momoyo is speaking...")
+          speak(reply, () => {
+            if (isCallActiveRef.current) {
+              setCallStatus("Your turn — speak now")
+              startListening()
+            }
+          })
+        }
       } catch {
         setCallStatus("Error. Tap Speak to try again.")
       }
@@ -122,7 +167,7 @@ export function AiAssistant() {
     isCallActiveRef.current = true
     setCallError(null)
     setCallStatus("Momoyo is greeting you...")
-    speak("Hello! I'm Momoyo's AI assistant. What would you like to know about her?", () => {
+    speak("Hello! I'm Momoyo's AI assistant. What would you like to know about her? You can also ask me to book a meeting!", () => {
       setCallStatus("Your turn — speak now")
       startListening()
     })
@@ -165,7 +210,7 @@ export function AiAssistant() {
         <p className="mb-2 text-sm font-medium uppercase tracking-widest text-primary">AI Assistant</p>
         <h2 className="mb-4 text-3xl font-bold tracking-tight text-foreground md:text-4xl">Ask Me Anything</h2>
         <p className="mb-10 max-w-2xl leading-relaxed text-muted-foreground">
-          Chat or talk with Momoyo's AI assistant to learn about her background and skills.
+          Chat or talk with Momoyo's AI assistant to learn about her background and skills, or book a meeting.
         </p>
 
         <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-lg shadow-foreground/[0.03]">
@@ -185,7 +230,7 @@ export function AiAssistant() {
                   {messages.map(msg => (
                     <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                       <div className={`max-w-[75%] rounded-2xl px-5 py-3 text-sm leading-relaxed ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"}`}>
-                        {msg.content}
+                        {msg.role === "assistant" ? renderMessageContent(msg.content) : msg.content}
                       </div>
                     </div>
                   ))}
@@ -193,7 +238,7 @@ export function AiAssistant() {
               </div>
               <div className="border-t border-border bg-background/50 px-6 py-4">
                 <form onSubmit={(e) => { e.preventDefault(); handleSend() }} className="flex items-center gap-3">
-                  <input type="text" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Type a message..." className="flex-1 rounded-xl border border-border bg-card px-5 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none" />
+                  <input type="text" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Type a message... (try 'book a meeting')" className="flex-1 rounded-xl border border-border bg-card px-5 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none" />
                   <button type="submit" disabled={!input.trim()} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/20 transition-colors hover:brightness-110 disabled:opacity-40">
                     <Send className="h-4 w-4" />
                   </button>
@@ -208,7 +253,7 @@ export function AiAssistant() {
                 <div className="w-full max-h-40 overflow-y-auto rounded-xl border border-border bg-background/50 px-4 py-3">
                   {messages.slice(-6).map(msg => (
                     <div key={msg.id} className={`text-xs mb-1 ${msg.role === "user" ? "text-right text-primary" : "text-left text-muted-foreground"}`}>
-                      <span className="font-semibold">{msg.role === "user" ? "You" : "Momoyo"}:</span> {msg.content}
+                      <span className="font-semibold">{msg.role === "user" ? "You" : "Momoyo"}:</span> {msg.content.replace(/\[BOOKING_LINK\]/g, " (see booking calendar below)")}
                     </div>
                   ))}
                 </div>
@@ -241,7 +286,7 @@ export function AiAssistant() {
                   </div>
                   <div>
                     <h4 className="text-lg font-semibold">Voice Call</h4>
-                    <p className="max-w-xs text-sm text-muted-foreground mt-1">Talk with Momoyo's AI using your browser's built-in voice. Works best in Chrome.</p>
+                    <p className="max-w-xs text-sm text-muted-foreground mt-1">Talk with Momoyo's AI using your browser's built-in voice. You can also ask to book a meeting! Works best in Chrome.</p>
                     {callError && <p className="text-xs text-destructive mt-2">{callError}</p>}
                   </div>
                   <button onClick={startCall} className="flex items-center gap-2 rounded-full bg-primary px-8 py-3 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/20 hover:brightness-110">

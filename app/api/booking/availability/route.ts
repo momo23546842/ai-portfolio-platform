@@ -6,7 +6,7 @@ const WORK_START = 9
 const WORK_END = 18
 
 function getServiceAccountAuth() {
-  const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\n/g, '\n')
+  const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n')
   const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
 
   const auth = new google.auth.JWT({
@@ -15,6 +15,16 @@ function getServiceAccountAuth() {
     scopes: ['https://www.googleapis.com/auth/calendar'],
   })
   return auth
+}
+
+function getSydneyOffset(dateStr: string): string {
+  // Determine if the date falls in AEDT (+11) or AEST (+10)
+  // AEDT: first Sunday in October to first Sunday in April
+  const d = new Date(dateStr + 'T12:00:00Z')
+  const month = d.getUTCMonth() // 0-indexed
+  // Simple heuristic: Apr-Sep = AEST (+10), Oct-Mar = AEDT (+11)
+  if (month >= 3 && month <= 8) return '+10:00'
+  return '+11:00'
 }
 
 export async function GET(req: NextRequest) {
@@ -29,9 +39,9 @@ export async function GET(req: NextRequest) {
     const auth = getServiceAccountAuth()
     const calendar = google.calendar({ version: 'v3', auth })
 
-    // Get start and end of the day in Sydney time
-    const dayStart = new Date(`${dateStr}T${String(WORK_START).padStart(2, '0')}:00:00+11:00`)
-    const dayEnd = new Date(`${dateStr}T${String(WORK_END).padStart(2, '0')}:00:00+11:00`)
+    const offset = getSydneyOffset(dateStr)
+    const dayStart = new Date(`${dateStr}T${String(WORK_START).padStart(2, '0')}:00:00${offset}`)
+    const dayEnd = new Date(`${dateStr}T${String(WORK_END).padStart(2, '0')}:00:00${offset}`)
 
     const eventsRes = await calendar.events.list({
       calendarId: process.env.GOOGLE_CALENDAR_ID!,
@@ -49,8 +59,8 @@ export async function GET(req: NextRequest) {
     // Generate 1-hour slots from 9:00 to 18:00
     const slots = []
     for (let hour = WORK_START; hour < WORK_END; hour++) {
-      const slotStart = new Date(`${dateStr}T${String(hour).padStart(2, '0')}:00:00+11:00`)
-      const slotEnd = new Date(`${dateStr}T${String(hour + 1).padStart(2, '0')}:00:00+11:00`)
+      const slotStart = new Date(`${dateStr}T${String(hour).padStart(2, '0')}:00:00${offset}`)
+      const slotEnd = new Date(`${dateStr}T${String(hour + 1).padStart(2, '0')}:00:00${offset}`)
 
       const isBusy = busyTimes.some(busy => {
         if (!busy.start || !busy.end) return false
