@@ -1,4 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
+<<<<<<< HEAD
+=======
+import { google } from 'googleapis'
+import { prisma } from '../../../../lib/prisma'
+import {
+  sendBookingConfirmationToGuest,
+  sendBookingNotificationToOwner,
+} from '../../../../lib/email'
+>>>>>>> 4c97723 (feat: add Resend email notifications for booking)
 
 async function getAccessToken(): Promise<string> {
   const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
@@ -51,7 +60,16 @@ async function getAccessToken(): Promise<string> {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
+    // Safely parse JSON body to avoid "Unexpected end of JSON input"
+    const text = await req.text()
+    let body: any = {}
+    try {
+      body = text ? JSON.parse(text) : {}
+    } catch (err) {
+      console.error('Invalid JSON body:', { text })
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+
     const { name, email, start, end, message } = body
 
     if (!name || !email || !start || !end) {
@@ -63,6 +81,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'GOOGLE_CALENDAR_ID not set' }, { status: 500 })
     }
 
+<<<<<<< HEAD
     const accessToken = await getAccessToken()
 
     // Note: attendees removed to avoid 403 on free Google accounts
@@ -103,5 +122,91 @@ export async function POST(req: NextRequest) {
       { error: `Failed to create booking: ${err?.message || 'Unknown'}` },
       { status: 500 }
     )
+=======
+    // Try creating event with attendees; if service account cannot invite attendees
+    // retry without attendees (common when Domain-Wide Delegation isn't configured).
+    let event: any
+    try {
+      event = await calendar.events.insert({
+        calendarId: process.env.GOOGLE_CALENDAR_ID!,
+        requestBody: {
+          summary: `Meeting with ${name}`,
+          description: `Email: ${email}\n${message ? `Message: ${message}` : ''}`,
+          start: { dateTime: start, timeZone: 'Australia/Sydney' },
+          end: { dateTime: end, timeZone: 'Australia/Sydney' },
+          attendees: [{ email }],
+        },
+      })
+    } catch (err: any) {
+      console.error('Calendar insert error (first attempt):', err?.message ?? err)
+      const message = String(err?.message ?? '')
+      if (message.includes('Service accounts cannot invite attendees')) {
+        // Retry without attendees
+        try {
+          console.warn('Retrying calendar insert without attendees')
+          event = await calendar.events.insert({
+            calendarId: process.env.GOOGLE_CALENDAR_ID!,
+            requestBody: {
+              summary: `Meeting with ${name}`,
+              description: `Email: ${email}\n${message ? `Message: ${message}` : ''}`,
+              start: { dateTime: start, timeZone: 'Australia/Sydney' },
+              end: { dateTime: end, timeZone: 'Australia/Sydney' },
+            },
+          })
+        } catch (err2: any) {
+          console.error('Calendar insert error (retry without attendees):', err2)
+          throw err2
+        }
+      } else {
+        throw err
+      }
+    }
+
+    const eventId = event.data?.id
+
+    // Save booking in database
+    const booking = await prisma.booking.create({
+      data: {
+        name,
+        email,
+        startTime: new Date(start),
+        endTime: new Date(end),
+        googleEventId: eventId ?? undefined,
+      },
+    })
+
+    // Send emails (do not fail booking if email sending fails)
+    const guestEmailRes = await sendBookingConfirmationToGuest({
+      guestName: name,
+      guestEmail: email,
+      startTime: start,
+      endTime: end,
+      timezone: 'Australia/Sydney',
+      meetingLink: undefined,
+      googleEventId: eventId,
+      bookingId: booking.id,
+    })
+
+    const ownerEmailRes = await sendBookingNotificationToOwner({
+      guestName: name,
+      guestEmail: email,
+      startTime: start,
+      endTime: end,
+      timezone: 'Australia/Sydney',
+      meetingLink: undefined,
+      googleEventId: eventId,
+      bookingId: booking.id,
+    })
+
+    const emailStatus = {
+      guest: guestEmailRes.ok ? 'sent' : 'failed',
+      owner: ownerEmailRes.ok ? 'sent' : ownerEmailRes.error === 'RESEND_NOTIFY_TO not set' ? 'skipped' : 'failed',
+    }
+
+    return NextResponse.json({ success: true, eventId, booking, emailStatus })
+  } catch (err) {
+    console.error('Booking error:', err)
+    return NextResponse.json({ error: 'Failed to create booking' }, { status: 500 })
+>>>>>>> 4c97723 (feat: add Resend email notifications for booking)
   }
 }
