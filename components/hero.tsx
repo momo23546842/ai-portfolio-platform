@@ -7,13 +7,13 @@ export function Hero() {
   return (
     <section
       id="hero"
-      className="relative flex min-h-[60vh] items-center justify-center px-6"
+      className="relative flex min-h-[60vh] items-center justify-center px-6 pt-24 sm:pt-28 md:pt-6"
     >
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute left-1/2 top-1/3 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/5 blur-3xl" />
       </div>
 
-      <div className="relative z-10 mx-auto flex max-w-5xl flex-col-reverse items-center gap-12 md:flex-row md:gap-16">
+      <div className="relative z-10 mx-auto flex max-w-5xl flex-col-reverse items-center gap-8 md:flex-row md:gap-16">
         <div className="flex-1 text-center md:text-left">
           <h1 className="mb-6 text-5xl font-bold leading-tight tracking-tight text-foreground md:text-7xl">
             <span className="text-balance">Momoyo Kataoka</span>

@@ -96,18 +96,18 @@ export function Header() {
           )}
         </nav>
 
-        <div className="flex items-center gap-2 md:hidden">
+        <div className="flex items-center gap-3 md:hidden">
           {/* Mobile Chat & Call */}
           <button
             onClick={() => scrollToAssistant("chat")}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary transition-colors active:bg-primary/20"
             aria-label="Chat"
           >
             <MessageCircle className="h-4 w-4" />
           </button>
           <button
             onClick={() => scrollToAssistant("call")}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-[oklch(0.55_0.12_150/0.12)] text-[oklch(0.45_0.10_150)] dark:text-[oklch(0.70_0.12_150)]"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-[oklch(0.55_0.12_150/0.12)] text-[oklch(0.45_0.10_150)] transition-colors active:bg-[oklch(0.55_0.12_150/0.22)] dark:text-[oklch(0.70_0.12_150)]"
             aria-label="Call"
           >
             <Phone className="h-4 w-4" />
