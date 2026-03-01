@@ -88,61 +88,81 @@ export function About() {
             </div>
           </div>
 
-          {/* Mobile: stacked layout */}
-          <div className="flex flex-col gap-6 md:hidden">
-            {/* IT */}
-            <div className="rounded-2xl border border-primary/20 bg-primary/[0.04] p-6">
-              <h3 className="mb-3 text-lg font-semibold text-foreground">IT &amp; Digital Systems</h3>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li className="flex items-start gap-2">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/50" />
-                  Web technologies
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/50" />
-                  AI tools
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/50" />
-                  Data &amp; automation
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/50" />
-                  System thinking
-                </li>
-              </ul>
+          {/* Mobile: IT × Health = Digital Health formula layout */}
+          <div className="flex flex-col items-center gap-5 md:hidden">
+            {/* Two domain pills side by side with × */}
+            <div className="flex w-full items-stretch gap-3">
+              {/* IT card */}
+              <div className="flex-1 rounded-2xl border border-primary/20 bg-primary/[0.04] px-5 py-5">
+                <h3 className="mb-3 text-center text-sm font-semibold text-foreground">
+                  IT &amp; Digital Systems
+                </h3>
+                <ul className="space-y-1.5 text-xs text-muted-foreground">
+                  <li className="flex items-start gap-1.5">
+                    <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-primary/50" />
+                    Web technologies
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-primary/50" />
+                    AI tools
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-primary/50" />
+                    Data &amp; automation
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-primary/50" />
+                    System thinking
+                  </li>
+                </ul>
+              </div>
+
+              {/* × symbol */}
+              <div className="flex items-center">
+                <span className="text-2xl font-light text-muted-foreground/60">×</span>
+              </div>
+
+              {/* Health card */}
+              <div className="flex-1 rounded-2xl border border-accent/30 bg-accent/[0.04] px-5 py-5">
+                <h3 className="mb-3 text-center text-sm font-semibold text-foreground">
+                  Health &amp; Human Care
+                </h3>
+                <ul className="space-y-1.5 text-xs text-muted-foreground">
+                  <li className="flex items-start gap-1.5">
+                    <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-accent/60" />
+                    Clinical nutrition
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-accent/60" />
+                    Preventive health
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-accent/60" />
+                    Behaviour change
+                  </li>
+                  <li className="flex items-start gap-1.5">
+                    <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-accent/60" />
+                    Patient-centered care
+                  </li>
+                </ul>
+              </div>
             </div>
 
-            {/* Digital Health - center */}
-            <div className="-my-2 z-10 mx-auto w-4/5 rounded-2xl border border-primary/30 bg-card px-6 py-5 text-center shadow-lg shadow-primary/5">
-              <h3 className="mb-2 text-base font-bold text-primary">Digital Health</h3>
-              <ul className="space-y-1 text-xs text-muted-foreground">
+            {/* Down arrow */}
+            <div className="flex flex-col items-center gap-0.5 text-primary/40">
+              <div className="h-5 w-px bg-primary/20" />
+              <svg width="12" height="8" viewBox="0 0 12 8" fill="none" className="text-primary/30">
+                <path d="M1 1L6 6L11 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+
+            {/* Digital Health result card */}
+            <div className="w-full rounded-2xl border border-primary/30 bg-card px-6 py-5 text-center shadow-lg shadow-primary/5">
+              <h3 className="mb-2.5 text-base font-bold text-primary">Digital Health</h3>
+              <ul className="space-y-1 text-xs leading-relaxed text-muted-foreground">
                 <li>Health-focused digital solutions</li>
                 <li>Technology-enabled care</li>
                 <li>Human-centered systems</li>
-              </ul>
-            </div>
-
-            {/* Health */}
-            <div className="rounded-2xl border border-accent/30 bg-accent/[0.04] p-6">
-              <h3 className="mb-3 text-lg font-semibold text-foreground">Health &amp; Human Care</h3>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li className="flex items-start gap-2">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent/60" />
-                  Clinical nutrition
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent/60" />
-                  Preventive health
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent/60" />
-                  Behaviour change
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent/60" />
-                  Patient-centered perspective
-                </li>
               </ul>
             </div>
           </div>
