@@ -2,17 +2,171 @@
 
 > 🇯🇵 [日本語版はこちら](#japanese)
 
+---
+
+## Introduction
+
+This project was built to extend my presence beyond time and availability.
+
+Even when I am sleeping, busy, or unavailable, this system allows visitors to interact with a digital version of me — ask questions, learn about my background, and schedule meetings — as if I were responding in real time.
+
+Rather than building a traditional portfolio website, I designed a system that can represent me both conversationally and functionally through AI-driven interaction and structured scheduling workflows.
+
+**This is not just a personal introduction page.
+It is an AI-powered presence platform.**
+
+---
+
 ## Overview
 
-**momoyo-ai** is a personal digital twin portfolio website. Visitors can learn about me through the website, have a conversation with an AI version of me, and even book a meeting — all in one place.
+This repository implements a full-stack AI-integrated digital twin web application.
 
-## Features
+The system combines:
 
-- 🧠 **AI Conversation** — Chat or talk with an AI assistant powered by [Vapi](https://vapi.ai), trained on my profile and background
-- 📅 **Smart Booking** — Book a meeting by checking my real-time availability via Google Calendar API
-- 🎙️ **Voice Booking** — Book a meeting through voice conversation with the AI assistant
-- 📬 **Email Notifications** — Automatic email confirmations for both parties via Resend
-- 💾 **Conversation History** — All conversations are saved to the database
+- Conversational AI (voice + chat)
+- Real-time calendar synchronization
+- Automated meeting booking workflows
+- Google Meet auto-generation
+- Email confirmation automation
+- Persistent conversation & booking storage
+
+The goal is to simulate natural interaction while integrating structured scheduling logic in a production-ready environment.
+
+---
+
+## Core Capabilities
+
+### Conversational AI
+
+- Voice and chat interaction
+- Structured booking intent handling
+- Tool-based execution via MCP integration
+
+### Smart Scheduling System
+
+- Real-time availability checks via Google Calendar
+- Server-side booking validation
+- Automatic Google Meet link generation
+
+### Automation Layer
+
+- Email confirmations via Resend
+- Persistent storage in PostgreSQL
+- End-to-end workflow orchestration
+
+---
+
+## System Architecture
+
+### Frontend
+
+- Next.js (App Router)
+- Tailwind CSS
+
+### Backend
+
+- Next.js API Routes
+- Prisma ORM
+- Neon (PostgreSQL)
+
+### AI Layer
+
+- Web Speech API (current implementation)
+- MCP-based structured tool execution
+- *(Previously Vapi + ElevenLabs pipeline)*
+
+### External Integrations
+
+- Google Calendar (Service Account authentication)
+- Google Meet link generation
+- Resend (email automation)
+
+### Deployment
+
+- Vercel (production hosting)
+
+---
+
+## Key Challenges & Solutions
+
+### 1. Synchronizing AI with Real-world Scheduling
+
+**Challenge:**
+AI-triggered booking requests needed to reflect real-time calendar availability without conflicts.
+
+**Solution:**
+
+- Implemented server-side availability validation
+- Controlled booking execution logic
+- Structured tool invocation via MCP
+
+This ensured reliable and conflict-free scheduling.
+
+### 2. Voice Calls Failing Due to ElevenLabs Quota Limits
+
+**Symptoms:**
+
+- Calls disconnected mid-session
+- Vapi logs showed `endedReason: "pipeline-error-eleven-labs-quota-exceeded"`
+
+**Cause:**
+Insufficient ElevenLabs free-tier credits (Required: 6 / Remaining: 4)
+
+**Decision & Solution:**
+Instead of upgrading immediately, I redesigned the voice architecture:
+
+- Removed Vapi + ElevenLabs integration
+- Migrated to browser-native Web Speech API
+- Simplified the voice processing flow
+
+**Removed Files:**
+
+- `components/vapi/VapiWidget.tsx`
+- `app/api/llm/route.ts`
+- `app/api/vapi/*`
+
+This reduced cost and improved system stability.
+
+**Future Plan:**
+Reintroduce ElevenLabs with a custom voice model for production-level voice personalization.
+
+### 3. Prisma Initialization Issues with Neon + Next.js
+
+**Challenge:**
+PrismaClient initialization errors prevented correct API route detection.
+
+**Solution:**
+
+- Implemented `@prisma/adapter-neon`
+- Switched to dynamic imports in API routes
+- Updated seed logic
+
+### 4. Google Calendar OAuth Configuration Confusion
+
+**Symptoms:**
+
+- Difficulty configuring OAuth Client ID
+- Redirect URI complexity
+
+**Root Cause:**
+Confusion between OAuth (user authentication) and Service Account (server authentication).
+
+Since this system only requires backend-controlled calendar access, OAuth was unnecessary.
+
+**Solution:**
+
+- Cancelled OAuth setup
+- Switched to Google Service Account authentication
+
+**Implementation Steps:**
+
+1. Created Service Account (`momoyo-calendar`)
+2. Assigned Editor role
+3. Generated JSON key
+4. Shared Google Calendar with Service Account email
+5. Granted event modification permission
+
+---
 
 ## Tech Stack
 
@@ -20,54 +174,74 @@
 |---|---|
 | Framework | Next.js (App Router) |
 | Styling | Tailwind CSS |
-| AI Voice/Chat | Vapi |
+| Voice/Chat | Web Speech API |
 | Database | Neon (PostgreSQL) |
 | ORM | Prisma |
-| Calendar | Google Calendar API |
+| Calendar | Google Calendar (Service Account) |
 | Email | Resend |
 | Deployment | Vercel |
 
-## Page Structure
+---
 
-Single-page scroll layout with the following sections:
+## Future Improvements & Roadmap
 
-- **Hero** — Introduction and AI conversation button
-- **About** — Personal background and personality
-- **Career** — Work and education timeline
-- **Skills** — Technical skill set
-- **Works** — Projects and activities
-- **Booking** — Schedule a meeting
-- **Contact** — Get in touch
+### 1. Personalized Voice Model
 
-## Getting Started
+Reintroduce ElevenLabs with a custom-trained voice model to replicate my natural voice.
 
-```bash
-# Clone the repository
-git clone https://github.com/your-username/momoyo-ai.git
-cd momoyo-ai
+### 2. Retrieval-Augmented Generation (RAG)
 
-# Install dependencies
-npm install
+Integrate structured profile and resume data into a vector database for deeper contextual responses.
 
-# Set up environment variables
-cp .env.example .env.local
+### 3. Multi-language Support
 
-# Run the development server
-npm run dev
-```
+Dynamic English/Japanese switching with adaptive tone.
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+### 4. User Authentication Layer
 
-## Environment Variables
+Optional accounts for:
 
-```env
-DATABASE_URL=
-VAPI_API_KEY=
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GOOGLE_REFRESH_TOKEN=
-RESEND_API_KEY=
-```
+- Returning visitor recognition
+- Secure booking management
+- Personalized follow-ups
+
+### 5. Analytics Dashboard
+
+Track:
+
+- Conversation patterns
+- Booking metrics
+- Feature usage
+
+### 6. Scalable Voice Pipeline
+
+Transition from browser speech to server-side voice processing for scalability.
+
+### 7. Phone Number Integration (PSTN Calling)
+
+Integrate a public phone number (e.g., Twilio/Vapi telephony) allowing users to call and interact with the AI through traditional phone calls.
+
+This will enable:
+
+- Real-world voice interaction
+- AI-powered call handling
+- Phone-based scheduling
+- Expanded accessibility
+
+**Long-term vision:**
+Transform this system from a personal portfolio into a scalable AI-driven presence platform.
+
+---
+
+## What This Project Demonstrates
+
+- Full-stack AI integration
+- Real-time API orchestration
+- Structured conversational workflows
+- Calendar-based scheduling automation
+- Authentication architecture decisions
+- Production-ready deployment practices
+- System redesign under constraints
 
 ---
 
@@ -75,59 +249,39 @@ RESEND_API_KEY=
 
 # momoyo-ai（日本語）
 
-**momoyo-ai** は個人のデジタルツイン ポートフォリオサイトです。訪問者はWebページで私のことを知り、AIと会話し、ミーティングの予約まで行うことができます。
+## はじめに
 
-## 機能
+本プロジェクトは、私の時間的制約を超えて「存在を拡張する」ことを目的として構築しました。
 
-- 🧠 **AI会話** — [Vapi](https://vapi.ai) を使った音声・チャット対応のAIアシスタント（私のプロフィールをもとに学習済み）
-- 📅 **スマート予約** — Google Calendar APIで私のリアルタイムの空き時間を確認して予約可能
-- 🎙️ **音声予約** — AIとの音声会話を通じて予約が完結
-- 📬 **メール通知** — Resendを使った予約確認メールの自動送信
-- 💾 **会話履歴保存** — 全ての会話をデータベースに保存
+私が就寝中や予定がある場合でも、このシステムを通じて訪問者はAIを介して自然に対話し、経歴や考えを知り、ミーティング予約まで行うことができます。
 
-## 技術スタック
+単なる自己紹介ページではなく、会話と実務機能を担う「デジタル上の分身」を実装したプラットフォームです。
 
-| カテゴリ | 技術 |
-|---|---|
-| フレームワーク | Next.js (App Router) |
-| スタイリング | Tailwind CSS |
-| AI音声・チャット | Vapi |
-| データベース | Neon (PostgreSQL) |
-| ORM | Prisma |
-| カレンダー | Google Calendar API |
-| メール | Resend |
-| デプロイ | Vercel |
+---
 
-## ページ構成
+## 概要
 
-1ページスクロール型で以下のセクションで構成：
+本リポジトリは、会話型AIとリアルタイム予約機能を統合したフルスタックWebアプリケーションです。
 
-- **Hero** — 自己紹介とAI会話ボタン
-- **About** — プロフィール・人柄
-- **Career** — 経歴タイムライン
-- **Skills** — スキル一覧
-- **Works** — 制作物・活動
-- **Booking** — ミーティング予約
-- **Contact** — 連絡先
+- 音声・チャットによる会話
+- Googleカレンダーとのリアルタイム同期
+- 会話中に完結する予約処理
+- Google Meet自動生成
+- メール自動送信
+- データベース保存
 
-## トラブルシューティング記録
+自然な対話体験と構造化されたスケジューリングロジックを統合しています。
 
-### Prisma 7 + Next.js の初期化エラー
-**エラー内容**
-- `PrismaClientInitializationError`: PrismaClient の初期化失敗
-- `No HTTP methods exported in route.ts`: APIルートが認識されない
+---
 
-**原因**
-- Prisma 7 では空のコンストラクタや `datasourceUrl` だけでは初期化できない
-- 初期化エラーがモジュール評価時に発生し、Next.js がルートのエクスポートを検出できなかった
+## 今後の拡張計画
 
-**解決方法**
-- `@prisma/adapter-neon` と `@neondatabase/serverless` + `ws` を使って PrismaClient を初期化
-- `route.ts` の prisma import を動的 import に変更（`const { prisma } = await import('@/lib/prisma')`）
-- `seed.ts` も同様にNeonアダプタを使う形に修正
+- カスタム音声モデル導入
+- RAG実装
+- 多言語対応
+- ユーザー認証追加
+- 分析ダッシュボード
+- 電話番号連携（PSTN対応）
 
-**インストールしたパッケージ**
-```bash
-npm install @prisma/adapter-neon @neondatabase/serverless ws
-npm install -D @types/ws
-```
+最終的には、個人ポートフォリオを超えた
+**「AI拡張型プレゼンスプラットフォーム」** への進化を目指しています。
