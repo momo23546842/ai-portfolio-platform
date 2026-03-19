@@ -40,6 +40,7 @@ export function AiAssistant() {
   const [isBooking, setIsBooking] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const recognitionRef = useRef<any>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   const isCallActiveRef = useRef(false)
   const isSpeakingRef = useRef(false)
   const callTimerRef = useRef<any>(null)
@@ -224,20 +225,65 @@ export function AiAssistant() {
     return <span>{msg.content}</span>
   }
 
-  const stopSpeaking = () => { window.speechSynthesis?.cancel(); setIsSpeaking(false); isSpeakingRef.current = false }
+  const stopSpeaking = () => {
+    // stop any audio playback
+    try {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        try { URL.revokeObjectURL(audioRef.current.src) } catch {}
+        audioRef.current = null
+      }
+    } catch {}
+    // stop Web Speech if active
+    try { window.speechSynthesis?.cancel() } catch {}
+    setIsSpeaking(false); isSpeakingRef.current = false
+  }
+
+  const fallbackToWebSpeech = (clean: string, onEnd?: () => void) => {
+    if (!window.speechSynthesis) { onEnd?.(); return }
+    try {
+      window.speechSynthesis.cancel()
+      const utt = new SpeechSynthesisUtterance(clean)
+      utt.rate = 1.15; utt.pitch = 1.1; utt.lang = "en-US"
+      const voices = window.speechSynthesis.getVoices()
+      const voice = voices.find(v => v.name.includes("Samantha")||v.name.includes("Karen")||v.name.includes("Zira")||v.name.toLowerCase().includes("female"))
+      if (voice) utt.voice = voice
+      utt.onstart = () => { setIsSpeaking(true); isSpeakingRef.current = true }
+      utt.onend = () => { setIsSpeaking(false); isSpeakingRef.current = false; onEnd?.() }
+      window.speechSynthesis.speak(utt)
+    } catch (e) {
+      setIsSpeaking(false); isSpeakingRef.current = false; onEnd?.()
+    }
+  }
 
   const speak = (text: string, onEnd?: () => void) => {
-    if (!window.speechSynthesis) { onEnd?.(); return }
-    window.speechSynthesis.cancel()
     const clean = text.replace(/\[BOOKING_LINK\]/g, "")
-    const utt = new SpeechSynthesisUtterance(clean)
-    utt.rate = 1.15; utt.pitch = 1.1; utt.lang = "en-US"
-    const voices = window.speechSynthesis.getVoices()
-    const voice = voices.find(v => v.name.includes("Samantha")||v.name.includes("Karen")||v.name.includes("Zira")||v.name.toLowerCase().includes("female"))
-    if (voice) utt.voice = voice
-    utt.onstart = () => { setIsSpeaking(true); isSpeakingRef.current = true }
-    utt.onend = () => { setIsSpeaking(false); isSpeakingRef.current = false; onEnd?.() }
-    window.speechSynthesis.speak(utt)
+
+    // Stop any current playback
+    stopSpeaking()
+
+    ;(async () => {
+      try {
+        setIsSpeaking(true); isSpeakingRef.current = true
+        const res = await fetch('/api/elevenlabs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: clean }),
+        })
+        if (!res.ok) throw new Error('ElevenLabs proxy failed')
+        const blob = await res.blob()
+        const url = URL.createObjectURL(blob)
+        const audio = new Audio(url)
+        audioRef.current = audio
+        audio.onended = () => { setIsSpeaking(false); isSpeakingRef.current = false; try { URL.revokeObjectURL(url) } catch {} ; audioRef.current = null; onEnd?.() }
+        audio.onerror = () => { try { URL.revokeObjectURL(url) } catch {} ; audioRef.current = null; setIsSpeaking(false); isSpeakingRef.current = false; fallbackToWebSpeech(clean, onEnd) }
+        await audio.play()
+      } catch (e) {
+        setIsSpeaking(false); isSpeakingRef.current = false
+        // fallback to browser TTS
+        fallbackToWebSpeech(clean, onEnd)
+      }
+    })()
   }
 
   const startListening = () => {
