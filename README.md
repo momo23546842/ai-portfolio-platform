@@ -4,244 +4,134 @@
 
 ---
 
-## Introduction
+# AI Digital Twin Portfolio
 
-This project was built to extend my presence beyond time and availability.
+## ■ Introduction
+This project is not a traditional portfolio website, but an interactive platform that allows users to experience what it is like to communicate with me directly.
 
-Even when I am sleeping, busy, or unavailable, this system allows visitors to interact with a digital version of me — ask questions, learn about my background, and schedule meetings — as if I were responding in real time.
+The AI can answer questions about me and handle meeting scheduling on my behalf, enabling users to interact with a digital version of myself in real time.
 
-Rather than building a traditional portfolio website, I designed a system that can represent me both conversationally and functionally through AI-driven interaction and structured scheduling workflows.
-
-**This is not just a personal introduction page.
-It is an AI-powered presence platform.**
+Instead of passively presenting information, this system delivers information through conversation based on user intent.  
+This approach allows me to represent myself in a more natural and realistic way.
 
 ---
 
-## Overview
+## ■ Background
+This project is based on a digital twin system originally developed during a full-stack AI agent internship as part of a team project.
 
-This repository implements a full-stack AI-integrated digital twin web application.
+After the internship, I extended and redesigned the system as an individual project to create a more personalized and practical experience.
 
-The system combines:
+While the original team project focused on chat and voice interaction, I enhanced the system by adding features such as meeting scheduling and a contact interface, improving both usability and completeness.
+
+---
+
+## ■ Overview
+This application is a full-stack AI-powered digital twin system.
+
+It integrates the following functionalities:
 
 - Conversational AI (voice + chat)
-- Real-time calendar synchronization
-- Automated meeting booking workflows
-- Google Meet auto-generation
-- Email confirmation automation
-- Persistent conversation & booking storage
+- Real-time Google Calendar integration
+- Automated meeting scheduling
+- Google Meet link generation
+- Email notification automation
+- Persistent storage for conversations and bookings
 
-The goal is to simulate natural interaction while integrating structured scheduling logic in a production-ready environment.
+The system is designed to combine natural interaction with structured scheduling workflows in a production-oriented architecture.
 
 ---
 
-## Core Capabilities
+## ■ Core Features
 
-### Conversational AI
+### ● Conversational Interface
+- Voice and chat-based interaction
+- AI-driven question answering
+- Context-aware responses based on user intent
 
-- Voice and chat interaction
-- Structured booking intent handling
-- Tool-based execution via MCP integration
-
-### Smart Scheduling System
-
+### ● Scheduling System
 - Real-time availability checks via Google Calendar
-- Server-side booking validation
-- Automatic Google Meet link generation
+- Automated meeting booking
+- Google Meet link generation
 
-### Automation Layer
-
-- Email confirmations via Resend
-- Persistent storage in PostgreSQL
+### ● Automation
+- Email notifications (Resend)
+- Data persistence (PostgreSQL)
 - End-to-end workflow orchestration
 
 ---
 
-## System Architecture
+## ■ System Architecture
 
 ### Frontend
-
 - Next.js (App Router)
 - Tailwind CSS
 
 ### Backend
-
 - Next.js API Routes
 - Prisma ORM
 - Neon (PostgreSQL)
 
-### AI Layer
+### AI / Voice
+- Groq API (low-latency LLM inference for real-time conversation)
+- ElevenLabs (personalized voice synthesis)
 
-- Web Speech API (current implementation)
-- MCP-based structured tool execution
-- *(Previously Vapi + ElevenLabs pipeline)*
-
-### External Integrations
-
-- Google Calendar (Service Account authentication)
-- Google Meet link generation
+### External Services
+- Google Calendar (Service Account)
+- Google Meet
 - Resend (email automation)
 
 ### Deployment
-
-- Vercel (production hosting)
-
----
-
-## Key Challenges & Solutions
-
-### 1. Synchronizing AI with Real-world Scheduling
-
-**Challenge:**
-AI-triggered booking requests needed to reflect real-time calendar availability without conflicts.
-
-**Solution:**
-
-- Implemented server-side availability validation
-- Controlled booking execution logic
-- Structured tool invocation via MCP
-
-This ensured reliable and conflict-free scheduling.
-
-### 2. Voice Calls Failing Due to ElevenLabs Quota Limits
-
-**Symptoms:**
-
-- Calls disconnected mid-session
-- Vapi logs showed `endedReason: "pipeline-error-eleven-labs-quota-exceeded"`
-
-**Cause:**
-Insufficient ElevenLabs free-tier credits (Required: 6 / Remaining: 4)
-
-**Decision & Solution:**
-Instead of upgrading immediately, I redesigned the voice architecture:
-
-- Removed Vapi + ElevenLabs integration
-- Migrated to browser-native Web Speech API
-- Simplified the voice processing flow
-
-**Removed Files:**
-
-- `components/vapi/VapiWidget.tsx`
-- `app/api/llm/route.ts`
-- `app/api/vapi/*`
-
-This reduced cost and improved system stability.
-
-**Future Plan:**
-Reintroduce ElevenLabs with a custom voice model for production-level voice personalization.
-
-### 3. Prisma Initialization Issues with Neon + Next.js
-
-**Challenge:**
-PrismaClient initialization errors prevented correct API route detection.
-
-**Solution:**
-
-- Implemented `@prisma/adapter-neon`
-- Switched to dynamic imports in API routes
-- Updated seed logic
-
-### 4. Google Calendar OAuth Configuration Confusion
-
-**Symptoms:**
-
-- Difficulty configuring OAuth Client ID
-- Redirect URI complexity
-
-**Root Cause:**
-Confusion between OAuth (user authentication) and Service Account (server authentication).
-
-Since this system only requires backend-controlled calendar access, OAuth was unnecessary.
-
-**Solution:**
-
-- Cancelled OAuth setup
-- Switched to Google Service Account authentication
-
-**Implementation Steps:**
-
-1. Created Service Account (`momoyo-calendar`)
-2. Assigned Editor role
-3. Generated JSON key
-4. Shared Google Calendar with Service Account email
-5. Granted event modification permission
+- Vercel
 
 ---
 
-## Tech Stack
-
-| Category | Technology |
-|---|---|
-| Framework | Next.js (App Router) |
-| Styling | Tailwind CSS |
-| Voice/Chat | Web Speech API |
-| Database | Neon (PostgreSQL) |
-| ORM | Prisma |
-| Calendar | Google Calendar (Service Account) |
-| Email | Resend |
-| Deployment | Vercel |
+## ■ Key Highlights
+- A conversational portfolio that enables interactive self-representation
+- Extension and redesign from a team-based project to an individual product
+- Integration of real-world scheduling and communication workflows
+- Unified experience combining chat, voice, and booking systems
+- Low-latency AI responses powered by Groq
+- Cost-aware and constraint-driven system design
 
 ---
 
-## Future Improvements & Roadmap
+## ■ Future Improvements
 
-### 1. Personalized Voice Model
+### ● PSTN Integration (Vapi)
+Plan to integrate Vapi to enable users to interact with the AI via phone calls.
 
-Reintroduce ElevenLabs with a custom-trained voice model to replicate my natural voice.
+This will allow:
+- Voice interaction without relying on a web browser
+- Real-time AI-powered phone conversations
+- Voice-based meeting scheduling
+- A more intuitive and accessible user experience
 
-### 2. Retrieval-Augmented Generation (RAG)
-
-Integrate structured profile and resume data into a vector database for deeper contextual responses.
-
-### 3. Multi-language Support
-
-Dynamic English/Japanese switching with adaptive tone.
-
-### 4. User Authentication Layer
-
-Optional accounts for:
-
-- Returning visitor recognition
-- Secure booking management
-- Personalized follow-ups
-
-### 5. Analytics Dashboard
-
-Track:
-
-- Conversation patterns
-- Booking metrics
-- Feature usage
-
-### 6. Scalable Voice Pipeline
-
-Transition from browser speech to server-side voice processing for scalability.
-
-### 7. Phone Number Integration (PSTN Calling)
-
-Integrate a public phone number (e.g., Twilio/Vapi telephony) allowing users to call and interact with the AI through traditional phone calls.
-
-This will enable:
-
-- Real-world voice interaction
-- AI-powered call handling
-- Phone-based scheduling
-- Expanded accessibility
-
-**Long-term vision:**
-Transform this system from a personal portfolio into a scalable AI-driven presence platform.
+The long-term goal is to extend the digital twin beyond the web into real-world communication as a “callable AI presence.”
 
 ---
 
-## What This Project Demonstrates
+### ● Multilingual Support (English / Japanese)
+Support both English and Japanese, enabling users to interact naturally in their preferred language.
 
-- Full-stack AI integration
-- Real-time API orchestration
-- Structured conversational workflows
-- Calendar-based scheduling automation
-- Authentication architecture decisions
-- Production-ready deployment practices
-- System redesign under constraints
+Rather than simple translation, the system will adapt tone and expression based on the language to provide a more natural communication experience.  
+This will allow the platform to serve a more global audience.
+
+---
+
+### ● Retrieval-Augmented Generation (RAG)
+Introduce RAG to generate responses based on structured data such as my profile, experience, and project information.
+
+This will improve response accuracy and consistency by grounding answers in my own data, enabling a more reliable and personalized digital twin experience.
+
+---
+
+## ■ Final Note
+This project was created not just as a portfolio, but as an exploration of how my presence can be extended beyond time and availability.
+
+The goal is to build a system that can represent me, communicate on my behalf, and create opportunities through interaction — even when I am not available.
+
+Moving forward, I aim to further evolve this system into a platform that explores new possibilities in the relationship between humans and AI.
+
 
 ---
 
@@ -249,39 +139,125 @@ Transform this system from a personal portfolio into a scalable AI-driven presen
 
 # momoyo-ai（日本語）
 
-## はじめに
+# AIデジタルツイン・ポートフォリオ
 
-本プロジェクトは、私の時間的制約を超えて「存在を拡張する」ことを目的として構築しました。
+## ■ Introduction
+このプロジェクトは、単なる自己紹介ページではなく、まるで私と直接対話しているかのような体験を提供するポートフォリオです。
 
-私が就寝中や予定がある場合でも、このシステムを通じて訪問者はAIを介して自然に対話し、経歴や考えを知り、ミーティング予約まで行うことができます。
+AIが私の代わりに質問に答えたり、ミーティングの予約を行うことができ、ユーザーはリアルタイムで「私自身」とやり取りしているような感覚を得ることができます。
 
-単なる自己紹介ページではなく、会話と実務機能を担う「デジタル上の分身」を実装したプラットフォームです。
-
----
-
-## 概要
-
-本リポジトリは、会話型AIとリアルタイム予約機能を統合したフルスタックWebアプリケーションです。
-
-- 音声・チャットによる会話
-- Googleカレンダーとのリアルタイム同期
-- 会話中に完結する予約処理
-- Google Meet自動生成
-- メール自動送信
-- データベース保存
-
-自然な対話体験と構造化されたスケジューリングロジックを統合しています。
+従来のように情報を一方的に提示するのではなく、ユーザーが求める情報に応じて、まるで会話をしているかのように伝えることで、自分自身をよりリアルに表現できる仕組みを設計しました。
 
 ---
 
-## 今後の拡張計画
+## ■ Background（開発背景）
+本プロジェクトは、AIエージェントのフルスタック開発インターンシップにおいて、チームで開発したデジタルツインをベースにしています。
 
-- カスタム音声モデル導入
-- RAG実装
-- 多言語対応
-- ユーザー認証追加
-- 分析ダッシュボード
-- 電話番号連携（PSTN対応）
+その後、このシステムを個人プロジェクトとして拡張し、よりパーソナライズされた体験を実現しました。
 
-最終的には、個人ポートフォリオを超えた
-**「AI拡張型プレゼンスプラットフォーム」** への進化を目指しています。
+チーム開発ではチャットと音声機能が中心でしたが、本プロジェクトでは新たにミーティング予約機能やコンタクトページを追加し、実用性と完成度を高めています。
+
+---
+
+## ■ Overview（概要）
+本アプリケーションは、AIを活用したフルスタックのデジタルツインシステムです。
+
+以下の機能を統合しています：
+
+- 会話型AI（音声＋チャット）
+- Googleカレンダーとのリアルタイム連携
+- ミーティング予約機能
+- Google Meetリンクの自動生成
+- メール通知の自動送信
+- 会話および予約データの永続化
+
+ユーザーとの自然な対話と、実用的なスケジューリング機能を統合することで、実運用を想定したシステム設計を行っています。
+
+---
+
+## ■ Core Features（主要機能）
+
+### ● 会話型インターフェース
+- チャットおよび音声による対話
+- AIによる質問応答
+- ユーザーの意図に応じた情報提供
+
+### ● スケジューリング機能
+- Googleカレンダーとの連携による空き状況確認
+- ミーティング予約の自動処理
+- Google Meetリンクの自動生成
+
+### ● 自動化機能
+- メール通知（Resend）
+- データの永続化（PostgreSQL）
+- ワークフローの自動化
+
+---
+
+## ■ System Architecture（システム構成）
+
+### Frontend
+- Next.js（App Router）
+- Tailwind CSS
+
+### Backend
+- Next.js API Routes
+- Prisma ORM
+- Neon（PostgreSQL）
+
+### AI / Voice
+- Groq API（低レイテンシなLLM推論によるリアルタイム会話処理）
+- ElevenLabs（パーソナライズ音声）
+
+### External Services
+- Google Calendar（Service Account）
+- Google Meet
+- Resend（メール送信）
+
+### Deployment
+- Vercel
+
+---
+
+## ■ Key Highlights（特徴・工夫）
+- AIによる対話型ポートフォリオという新しい自己表現
+- チーム開発から個人プロジェクトへの拡張・再設計
+- 実利用を想定した予約・通知機能の統合
+- 音声・チャット・スケジューリングの一体化
+- 低レイテンシなAI応答（Groqを活用した高速推論）
+- コストや制約を考慮した設計（音声APIなど）
+
+---
+
+## ■ Future Improvements（今後の展望）
+
+### ● 電話番号連携（PSTN / Vapi）
+Vapiを活用し、ユーザーが電話番号に発信することでAIと直接会話できる機能を実装予定です。
+
+これにより、Webブラウザに依存しない音声インターフェースを実現し、AIによるリアルタイム通話対応や音声ベースでのミーティング予約が可能になります。  
+より直感的でアクセシブルなユーザー体験を提供し、将来的には「電話でも話せるデジタルツイン」として、現実に近い形でのインタラクションを目指します。
+
+---
+
+### ● 多言語対応（英語・日本語）
+英語と日本語の両方に対応し、ユーザーの言語に応じて自然な対話ができるシステムを構築予定です。
+
+単なる翻訳ではなく、言語ごとのニュアンスや表現の違いにも対応し、より自然でストレスのないコミュニケーションを実現します。  
+これにより、グローバルなユーザーにも対応できるポートフォリオへと発展させます。
+
+---
+
+### ● RAGによる高度な応答
+RAG（Retrieval-Augmented Generation）を導入し、プロフィールや経歴、プロジェクト情報などをもとに応答を生成する仕組みを構築予定です。
+
+これにより、AIがより正確で一貫性のある回答を行えるようになり、「自分に基づいた情報」で答えるデジタルツインを実現します。  
+より深く、信頼性の高い対話体験の提供を目指します。
+
+---
+
+## ■ Final Note（おわりに）
+このプロジェクトは、単なるポートフォリオではなく、「自分自身の存在をどのようにデジタル上で表現できるか」を探求する中で生まれました。
+
+時間や場所に縛られず、自分の代わりに対話し、情報を伝え、機会を生み出す存在を実現することを目指しています。
+
+今後はさらに機能や精度を高めながら、個人プロジェクトにとどまらず、**人とAIの新しい関係性を示すプラットフォームへと発展させていきたいと考えています。**
