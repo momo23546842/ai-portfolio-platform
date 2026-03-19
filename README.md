@@ -4,7 +4,6 @@
 
 ---
 
-# AI Digital Twin Portfolio
 
 ## ■ Introduction
 This project is not a traditional portfolio website, but an interactive platform that allows users to experience what it is like to communicate with me directly.
@@ -138,8 +137,6 @@ Moving forward, I aim to further evolve this system into a platform that explore
 <a name="japanese"></a>
 
 # momoyo-ai（日本語）
-
-# AIデジタルツイン・ポートフォリオ
 
 ## ■ Introduction
 このプロジェクトは、単なる自己紹介ページではなく、まるで私と直接対話しているかのような体験を提供するポートフォリオです。
