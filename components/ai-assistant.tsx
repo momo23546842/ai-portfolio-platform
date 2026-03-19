@@ -383,12 +383,12 @@ export function AiAssistant() {
           Ask about my work, skills, or career. You can also book a meeting directly!
         </p>
 
-        <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-lg shadow-foreground/[0.03]">
+        <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-lg shadow-foreground/3">
           <div className="flex border-b border-border">
             <button onClick={() => setTab("chat")} className={`flex flex-1 items-center justify-center gap-2 py-4 text-sm font-medium transition-colors ${tab === "chat" ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"}`}>
               <MessageCircle className="h-4 w-4" /> Chat
             </button>
-            <button onClick={() => setTab("call")} className={`flex flex-1 items-center justify-center gap-2 py-4 text-sm font-medium transition-colors ${tab === "call" ? "border-b-2 border-[oklch(0.55_0.12_150)] text-[oklch(0.55_0.12_150)] dark:border-[oklch(0.70_0.12_150)] dark:text-[oklch(0.70_0.12_150)]" : "text-muted-foreground hover:text-foreground"}`}>
+            <button onClick={() => setTab("call")} className={`flex flex-1 items-center justify-center gap-2 py-4 text-sm font-medium transition-colors ${tab === "call" ? "border-b-2 border-sage-call text-sage-call dark:border-sage-call dark:text-sage-call" : "text-muted-foreground hover:text-foreground"}`}>
               <Phone className="h-4 w-4" /> Call
             </button>
           </div>
@@ -423,7 +423,7 @@ export function AiAssistant() {
               {!isCallActive ? (
                 <div className="flex flex-col items-center gap-8 text-center py-8">
                   <div className="relative">
-                    <div className="flex h-28 w-28 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-accent/20 shadow-lg">
+                    <div className="flex h-28 w-28 items-center justify-center rounded-full bg-linear-to-br from-primary/20 to-accent/20 shadow-lg">
                       <User className="h-14 w-14 text-primary" />
                     </div>
                   </div>
@@ -483,7 +483,7 @@ export function AiAssistant() {
 
                     <button onClick={endCall}
                       className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500 text-white shadow-lg shadow-red-500/30 transition-transform hover:scale-105 active:scale-95">
-                      <PhoneOff className="h-7 w-7 rotate-[135deg]" />
+                      <PhoneOff className="h-7 w-7 rotate-135" />
                     </button>
 
                     <button onClick={stopSpeaking}
