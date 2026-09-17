@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import Groq from 'groq-sdk'
 
-const GROQ_MODEL = 'llama-3.3-70b-versatile'
+const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant'
 
 async function callGroq(message: string, systemPrompt: string) {
   const apiKey = process.env.GROQ_API_KEY
   if (!apiKey) throw new Error('GROQ_API_KEY not set')
 
   const groq = new Groq({ apiKey })
+
+  console.log('Using Groq model:', GROQ_MODEL)
 
   const response = await groq.chat.completions.create({
     model: GROQ_MODEL,
