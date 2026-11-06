@@ -1,16 +1,7 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { skills, certifications } from '@/lib/profile-data'
 
+// Same data the site and the chat use (lib/profile-data.ts).
 export async function GET() {
-  try {
-    const skills = await prisma.skill.findMany({
-      orderBy: { category: 'asc' }
-    })
-    return NextResponse.json(skills)
-  } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to fetch skills' },
-      { status: 500 }
-    )
-  }
+  return NextResponse.json({ skills, certifications })
 }

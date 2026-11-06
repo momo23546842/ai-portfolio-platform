@@ -9,6 +9,16 @@ interface Message {
   content: string
   type?: "text" | "slots" | "booking-form" | "booking-confirmed"
   meta?: any
+  /** Passages the answer was grounded in (returned by /api/chat) */
+  sources?: { id: string; title: string }[]
+}
+
+/** The recent plain-text turns, sent with each question so follow-ups make sense. */
+function chatHistory(messages: Message[]) {
+  return messages
+    .filter(m => m.id !== "welcome" && (!m.type || m.type === "text"))
+    .slice(-8)
+    .map(m => ({ role: m.role, content: m.content.replace(/\[BOOKING_LINK\]/g, "") }))
 }
 
 interface Slot {
@@ -25,7 +35,7 @@ export function AiAssistant() {
     {
       id: "welcome",
       role: "assistant",
-      content: "Hey! I'm Momoyo. Ask me anything about my work, skills, or career. You can also book a meeting with me \u2014 just say a date!",
+      content: "Hey! I'm Momoyo. Ask me anything about my work, skills, or career \u2014 in English or 日本語. You can also book a meeting with me \u2014 just say a date!",
     },
   ])
   const [isCallActive, setIsCallActive] = useState(false)
@@ -177,9 +187,9 @@ export function AiAssistant() {
       if (lastMsg?.role === "assistant" && (lastMsg.content.includes("What date") || lastMsg.content.includes("another date"))) { await showSlotsForDate(date); return }
     }
     try {
-      const res = await fetch("/api/chat", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({message:text}) })
+      const res = await fetch("/api/chat", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ message:text, history: chatHistory(messages), mode:"chat" }) })
       const data = await res.json()
-      setMessages(prev => [...prev, { id:(Date.now()+1).toString(), role:"assistant", content:data.reply }])
+      setMessages(prev => [...prev, { id:(Date.now()+1).toString(), role:"assistant", content:data.reply ?? data.error ?? "", sources:data.sources }])
     } catch {
       setMessages(prev => [...prev, { id:(Date.now()+1).toString(), role:"assistant", content:"Oops, something went wrong. Please try again!" }])
     }
@@ -222,7 +232,14 @@ export function AiAssistant() {
           <CalendarDays className="h-3 w-3" /> Open Calendar
         </button>{parts[1] && <span>{parts[1]}</span>}</>)
     }
-    return <span>{msg.content}</span>
+    return (<>
+      <span>{msg.content}</span>
+      {msg.sources && msg.sources.length > 0 && (
+        <span className="mt-2 block text-[11px] leading-snug text-muted-foreground">
+          参照した情報 / Sources: {msg.sources.slice(0, 3).map(s => s.title).join(" · ")}
+        </span>
+      )}
+    </>)
   }
 
   const stopSpeaking = () => {
@@ -343,7 +360,7 @@ export function AiAssistant() {
       }
       setCallStatus("Thinking...")
       try {
-        const res = await fetch("/api/chat", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({message:transcript}) })
+        const res = await fetch("/api/chat", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ message:transcript, history: chatHistory(messages), mode:"voice" }) })
         const data = await res.json()
         const reply = data.reply?.replace(/\[BOOKING_LINK\]/g,'') || ''
         setMessages(prev => [...prev, { id:(Date.now()+1).toString(), role:"assistant", content:reply }])

@@ -4,7 +4,7 @@ const skills = [
   {
     category: "Web Development",
     icon: Globe,
-    items: ["Next.js", "TypeScript", "JavaScript", "HTML", "CSS / SCSS"],
+    items: ["Next.js", "React", "TypeScript", "JavaScript", "Tailwind CSS", "HTML", "CSS / SCSS"],
   },
   {
     category: "Cloud & Infrastructure",
@@ -14,17 +14,17 @@ const skills = [
   {
     category: "AI Systems",
     icon: Brain,
-    items: ["Vercel AI SDK", "MCP integration", "API integration"],
+    items: ["LLM apps (Groq API)", "RAG (BM25 retrieval)", "MCP server", "Prompt design", "Voice AI (ElevenLabs)", "Claude / GitHub Copilot"],
   },
   {
     category: "Database",
     icon: Database,
-    items: ["PostgreSQL", "MySQL"],
+    items: ["PostgreSQL", "MySQL", "Prisma"],
   },
   {
     category: "Tools / Workflow",
     icon: Wrench,
-    items: ["GitHub (PR, branching)", "ClickUp (task tracking)", "ngrok (tunneling)"],
+    items: ["GitHub (PR, branching)", "GitHub Actions", "ClickUp (task tracking)", "ngrok (tunneling)", "LMS administration"],
   },
   {
     category: "Professional",
@@ -36,7 +36,15 @@ const skills = [
 const certifications = [
   {
     title: "Registered Dietitian",
-    detail: "Japan — National License",
+    detail: "Japan — National License (2022)",
+  },
+  {
+    title: "Registered Seller of OTC Drugs",
+    detail: "Japan (2021)",
+  },
+  {
+    title: "TOEIC Listening & Reading 825",
+    detail: "August 2026",
   },
 ]
 

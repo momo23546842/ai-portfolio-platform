@@ -1,22 +1,33 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { profile, timeline, works, skills, certifications, profileChunks } from '@/lib/profile-data'
+import { buildIndex, search } from '@/lib/rag'
 
-// Centralized tools metadata (used by GET handshake, initialize, and tools/list)
+// MCP tools exposing my profile to AI agents (for example a voice agent). They read the same
+// data as the site and the chat (lib/profile-data.ts), so every channel gives the same answer.
 const toolsList = [
   {
     name: 'getProfile',
-    description: "Returns Momoyo Kataoka's profile and bio information. Call this when asked about who she is.",
+    description: "Returns Momoyo Kataoka's profile, summary and career goal. Call this when asked who she is.",
     inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'getCareer',
-    description: "Returns Momoyo Kataoka's career / resume entries. Call this when asked about work history or positions.",
+    description: "Returns Momoyo Kataoka's work history and education, newest first.",
     inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'getSkills',
-    description: "Returns Momoyo Kataoka's skills and proficiency levels. Call this when asked about skills or expertise.",
+    description: "Returns Momoyo Kataoka's skills, certifications and portfolio projects.",
     inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'searchProfile',
+    description: 'Searches everything about Momoyo Kataoka (career, projects, skills, Q&A) and returns the most relevant passages. Use for specific questions, in Japanese or English.',
+    inputSchema: {
+      type: 'object',
+      properties: { query: { type: 'string', description: 'The question or keywords' } },
+      required: ['query'],
+    },
   },
 ]
 
@@ -24,52 +35,33 @@ export const runtime = 'nodejs'
 
 // GET: simple handshake for tooling / browser checks
 export async function GET() {
-  const handshake = {
-    name: 'momoyo-ai-mcp',
-    version: '1.0.0',
-    tools: toolsList,
-  }
-  return NextResponse.json(handshake)
+  return NextResponse.json({ name: 'momoyo-ai-mcp', version: '1.1.0', tools: toolsList })
 }
 
-// Tool implementations
-type ToolName = 'getProfile' | 'getCareer' | 'getSkills'
+const index = buildIndex(profileChunks())
 
-async function getProfile() {
-  const result = await prisma.profile.findFirst()
-  try {
-    console.log('getProfile called, result:', JSON.stringify(result))
-  } catch (e) {
-    console.log('getProfile called, result (non-serializable)')
+function runTool(name: string, args: Record<string, unknown>) {
+  switch (name) {
+    case 'getProfile':
+      return profile
+    case 'getCareer':
+      return timeline
+    case 'getSkills':
+      return { skills, certifications, works }
+    case 'searchProfile': {
+      const query = typeof args.query === 'string' ? args.query.slice(0, 500) : ''
+      if (!query) return { error: 'query is required' }
+      return search(index, query, 5).map(({ title, text, score }) => ({ title, text, score: Math.round(score * 100) / 100 }))
+    }
+    default:
+      return { error: `unknown tool: ${name}` }
   }
-  return result
-}
-
-async function getCareer() {
-  const result = await prisma.resume.findMany({ orderBy: { startDate: 'desc' } })
-  try {
-    console.log('getCareer called, result:', JSON.stringify(result))
-  } catch (e) {
-    console.log('getCareer called, result (non-serializable)')
-  }
-  return result
-}
-
-async function getSkills() {
-  const result = await prisma.skill.findMany({ orderBy: { category: 'asc' } })
-  try {
-    console.log('getSkills called, result:', JSON.stringify(result))
-  } catch (e) {
-    console.log('getSkills called, result (non-serializable)')
-  }
-  return result
 }
 
 // POST: JSON-RPC 2.0 MCP support (initialize, tools/list, tools/call)
 export async function POST(req: Request) {
   try {
     const raw = await req.text()
-    console.log('MCP JSON-RPC raw request:', raw)
 
     let payload: any = {}
     try {
@@ -79,7 +71,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'invalid json' }, { status: 400 })
     }
 
-    console.log('MCP JSON-RPC parsed payload:', JSON.stringify(payload))
 
     const { method, params, id, jsonrpc } = payload || {}
 
@@ -92,7 +83,7 @@ export async function POST(req: Request) {
     if (method === 'initialize') {
       const handshake = {
         name: 'momoyo-ai-mcp',
-        version: '1.0.0',
+        version: '1.1.0',
         tools: toolsList,
       }
       console.log('MCP initialize ->', handshake)
@@ -117,7 +108,6 @@ export async function POST(req: Request) {
       const content: Array<{ type: 'text'; text: string }> = []
 
       for (const call of toolCallList) {
-        const callId = call?.id || call?.toolCallId || 'generated-1'
         const fnName: string | undefined = call?.function?.name || call?.functionName || call?.name || params?.name
         const argsRaw = call?.function?.arguments ?? call?.arguments ?? '{}'
         let args: any = {}
@@ -140,10 +130,7 @@ export async function POST(req: Request) {
 
         let toolResult: unknown
         try {
-          if (fnName === 'getProfile') toolResult = await getProfile()
-          else if (fnName === 'getCareer') toolResult = await getCareer()
-          else if (fnName === 'getSkills') toolResult = await getSkills()
-          else toolResult = { error: `unknown tool: ${fnName}` }
+          toolResult = runTool(fnName, args && typeof args === 'object' ? args : {})
         } catch (e) {
           console.error('MCP tool execution error', e)
           toolResult = { error: 'tool execution error', details: String(e) }
@@ -154,7 +141,6 @@ export async function POST(req: Request) {
       }
 
       const resultPayload = { content }
-      console.log('MCP tools/call result payload:', JSON.stringify(resultPayload))
       return rpcResponse(resultPayload)
     }
 
@@ -166,4 +152,4 @@ export async function POST(req: Request) {
   }
 }
 
-// Note: keep default (node) runtime so Prisma (server-only) can be used.
+

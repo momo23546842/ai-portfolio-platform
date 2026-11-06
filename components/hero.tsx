@@ -19,7 +19,8 @@ export function Hero() {
             <span className="text-balance">Momoyo Kataoka</span>
           </h1>
           <p className="mx-auto mb-10 max-w-xl text-lg leading-relaxed text-muted-foreground md:mx-0">
-            Aspiring to design digital experiences that connect health and technology.
+            Registered Dietitian × generative AI developer. I build LLM and RAG applications that
+            solve real problems, and the AI below answers questions about me in English or 日本語.
           </p>
           <a
             href="#contact"

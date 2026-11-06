@@ -1,49 +1,15 @@
 import { Briefcase, GraduationCap } from "lucide-react"
 
-const timeline = [
-  {
-    title: "LMS Intern",
-    org: "ECA College",
-    period: "Feb 2026 – Present",
-    description:
-      "Supporting LMS administration and digital learning systems, ensuring smooth platform operations and user experience.",
-    type: "work" as const,
-  },
-  {
-    title: "Full Stack & Agentic AI Industry Project Intern (Team Lead)",
-    org: "AusBiz Consulting · 10-week Industry Internship",
-    period: "Nov 2025 – Feb 2026",
-    description:
-      "Led a team in developing AI-driven web applications using modern full-stack technologies, focusing on intelligent systems and practical industry solutions.",
-    type: "work" as const,
-  },
-  {
-    title: "Diploma of Information Technology",
-    org: "ECA College",
-    period: "2025 – Present",
-    type: "education" as const,
-  },
-  {
-    title: "Dietitian (Online, Self-employed)",
-    org: "",
-    period: "2025 – Present",
-    description:
-      "Providing nutrition consultations and health guidance through digital platforms.",
-    type: "work" as const,
-  },
-  {
-    title: "Dietitian",
-    org: "Chiba Yakuhin, Japan",
-    period: "2022 – 2024",
-    type: "work" as const,
-  },
-  {
-    title: "Bachelor's Degree in Nutrition",
-    org: "Nagoya University of Arts and Sciences",
-    period: "2018 – 2022",
-    type: "education" as const,
-  },
-]
+import { timeline as profileTimeline, periodText } from "@/lib/profile-data"
+
+// Built from lib/profile-data.ts, the same data the AI chat answers from.
+const timeline = profileTimeline.map((item) => ({
+  title: item.title.en,
+  org: item.org.en,
+  period: periodText(item, "en"),
+  description: item.summary.en,
+  type: item.kind,
+}))
 
 export function Career() {
   return (
