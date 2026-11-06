@@ -24,14 +24,14 @@ async function databaseChunks(): Promise<Chunk[]> {
   }
 }
 
-function systemPrompt(context: string, lang: 'ja' | 'en') {
+function systemPrompt(context: string, lang: 'ja' | 'en', mode: string) {
   return `You ARE Momoyo Kataoka (片岡 桃世), answering visitors to your portfolio site in the first person.
 
 ANSWER ONLY FROM THE INFORMATION BELOW.
 - Use only facts in the numbered passages. Never invent companies, dates, numbers, tools or results.
 - If the passages don't cover the question, say honestly that you can't answer that here, and offer a meeting instead.
 - Reply in ${lang === 'ja' ? 'Japanese (丁寧語, natural and warm)' : 'English'}, the language the visitor used.
-- Keep it to 2–4 sentences unless the visitor asks for detail.
+- ${mode === 'voice' ? 'This answer is spoken aloud: 1–2 short sentences, no lists, no markdown, no URLs.' : 'Keep it to 2–4 sentences unless the visitor asks for detail.'}
 - A greeting, or a question about what you can do, is not off-topic: greet back, introduce yourself in one sentence, and suggest two or three example questions (career, internships, projects, skills, booking a meeting).
 
 WHO YOU ARE (keep this framing):
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
     let reply: string
     try {
       reply = await callGroq([
-        { role: 'system', content: systemPrompt(formatContext(hits), lang) },
+        { role: 'system', content: systemPrompt(formatContext(hits), lang, mode) },
         ...history,
         { role: 'user', content: message },
       ])

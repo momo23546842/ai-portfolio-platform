@@ -130,3 +130,7 @@
 - Added a rate limit and a message length limit to the chat API
 - Greetings and "what can you do?" now get a self-introduction instead of a refusal
 - Added tests (`npm test`) and GitHub Actions
+- Voice calls in Japanese: choose English or 日本語 before a call (Japanese browsers start in Japanese); speech recognition, fixed lines and dates follow the choice, and ElevenLabs uses the multilingual model
+- Spoken replies are asked to be 1–2 sentences and are shortened at a sentence end
+- Fixed the voice call sending stale conversation history
+- Locked down /api/elevenlabs (own voice only, length cap, rate limit)

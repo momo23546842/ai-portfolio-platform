@@ -24,7 +24,7 @@ After the internship I rebuilt it as a personal project. A normal portfolio only
 
 | Feature | Details |
 |---|---|
-| Answers by chat and voice | Career, internships, projects, skills and certifications. Chat works in English and Japanese; voice calls are currently English only, spoken with ElevenLabs |
+| Answers by chat and voice | Career, internships, projects, skills and certifications. Both chat and voice calls work in English and Japanese (pick the language before a call); speech uses ElevenLabs' multilingual model |
 | Grounded answers (RAG) | Only the profile passages relevant to the question are sent to the LLM. The sources are shown under each answer |
 | Follow-up questions | Recent turns are remembered, so "What tech did you use there?" works |
 | Says when it doesn't know | Questions the profile doesn't cover (e.g. "What are your hobbies?") get no guess, but an offer to meet |
@@ -78,6 +78,7 @@ flowchart LR
 lib/
   profile-data.ts   career, projects, skills and Q&A (shared by the page and the AI)
   rag.ts            splitting, indexing, BM25 search, history validation (no dependencies)
+  voice.ts          voice call language: locale, fixed spoken lines, shortening replies for speech
   prisma.ts         database client
 app/api/
   chat/             chat API (search → prompt → Groq → answer and sources)
@@ -86,7 +87,7 @@ app/api/
   contact/          contact form
   elevenlabs/       text to speech
 components/         page sections
-tests/              search and history tests
+tests/              search, history and voice tests
 ```
 
 ## Tests
@@ -110,7 +111,7 @@ Set these in `.env`:
 |---|---|
 | `DATABASE_URL` | Neon (PostgreSQL) connection |
 | `GROQ_API_KEY`, `GROQ_MODEL` | LLM (defaults to `llama-3.1-8b-instant`) |
-| `ELEVENLABS_API_KEY`, `VOICE_ID` | Voice |
+| `ELEVENLABS_API_KEY`, `VOICE_ID`, `ELEVENLABS_MODEL` | Voice (model defaults to `eleven_multilingual_v2`) |
 | `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY`, `GOOGLE_CALENDAR_ID` | Booking (Google Calendar) |
 | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI`, `GOOGLE_OAUTH_REFRESH_TOKEN` | Google Meet links |
 | `RESEND_API_KEY`, `RESEND_FROM`, `RESEND_NOTIFY_TO`, `CONTACT_NOTIFY_EMAIL` | Email notifications |
@@ -150,7 +151,7 @@ On Vercel, set them for both Production and Preview, and redeploy after changing
 
 | 機能 | 内容 |
 |---|---|
-| チャット・音声で質問に答える | 経歴、インターン、作品、スキル、資格などに答えます。チャットは日本語・英語、音声通話は現在英語のみで、ElevenLabsで読み上げます |
+| チャット・音声で質問に答える | 経歴、インターン、作品、スキル、資格などに答えます。チャットも音声通話も日本語・英語に対応しています（通話の前に言語を選びます）。音声はElevenLabsの多言語モデルで読み上げます |
 | 根拠のある回答（RAG） | 質問に関係する経歴データだけを検索してLLMに渡します。回答の下に「参照した情報」を表示します |
 | 続けての質問 | 直近の会話を覚えているので、「その時に使った技術は？」のような質問にも答えられます |
 | 知らないことは知らないと言う | 経歴データにない質問（例：「趣味は？」）には推測で答えず、ミーティングを案内します |
@@ -204,6 +205,7 @@ flowchart LR
 lib/
   profile-data.ts   経歴・作品・スキル・Q&A（画面とAIの共通の元データ）
   rag.ts            分割・索引・BM25検索・会話履歴の検証（外部依存なし）
+  voice.ts          音声通話の言語（認識する言語、決まった読み上げ文、読み上げ用の短縮）
   prisma.ts         データベース接続
 app/api/
   chat/             チャットAPI（検索 → プロンプト → Groq → 回答と参照元）
@@ -212,7 +214,7 @@ app/api/
   contact/          問い合わせ
   elevenlabs/       音声合成
 components/         画面の各セクション
-tests/              検索・会話履歴のテスト
+tests/              検索・会話履歴・音声のテスト
 ```
 
 ### テスト
@@ -236,7 +238,7 @@ npm run dev
 |---|---|
 | `DATABASE_URL` | Neon (PostgreSQL) の接続先 |
 | `GROQ_API_KEY`, `GROQ_MODEL` | LLM（モデルを省略すると `llama-3.1-8b-instant`） |
-| `ELEVENLABS_API_KEY`, `VOICE_ID` | 音声 |
+| `ELEVENLABS_API_KEY`, `VOICE_ID`, `ELEVENLABS_MODEL` | 音声（モデルを省略すると `eleven_multilingual_v2`） |
 | `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY`, `GOOGLE_CALENDAR_ID` | 予約（Google Calendar） |
 | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI`, `GOOGLE_OAUTH_REFRESH_TOKEN` | Google Meetのリンク作成 |
 | `RESEND_API_KEY`, `RESEND_FROM`, `RESEND_NOTIFY_TO`, `CONTACT_NOTIFY_EMAIL` | メール通知 |

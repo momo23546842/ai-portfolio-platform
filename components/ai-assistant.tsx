@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
+import { speechLocale, defaultVoiceLang, voiceLines, spokenDate, spokenReply, type VoiceLang } from "@/lib/voice"
 import { Send, Mic, MicOff, Phone, PhoneOff, MessageCircle, CalendarDays, Clock, Check, Loader2, User } from "lucide-react"
 
 interface Message {
@@ -54,6 +55,15 @@ export function AiAssistant() {
   const isCallActiveRef = useRef(false)
   const isSpeakingRef = useRef(false)
   const callTimerRef = useRef<any>(null)
+  const [voiceLang, setVoiceLang] = useState<VoiceLang>("en")
+  const voiceLangRef = useRef<VoiceLang>("en")
+  // The recognition callbacks outlive renders, so they read the latest messages from a ref.
+  const messagesRef = useRef<Message[]>([])
+  const L = voiceLines[voiceLang]
+
+  useEffect(() => { messagesRef.current = messages }, [messages])
+  useEffect(() => { voiceLangRef.current = voiceLang }, [voiceLang])
+  useEffect(() => { setVoiceLang(defaultVoiceLang(typeof navigator !== "undefined" ? navigator.languages : undefined)) }, [])
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -261,9 +271,12 @@ export function AiAssistant() {
     try {
       window.speechSynthesis.cancel()
       const utt = new SpeechSynthesisUtterance(clean)
-      utt.rate = 1.15; utt.pitch = 1.1; utt.lang = "en-US"
+      const lang = voiceLangRef.current
+      utt.rate = lang === "ja" ? 1.05 : 1.15; utt.pitch = 1.1; utt.lang = speechLocale(lang)
       const voices = window.speechSynthesis.getVoices()
-      const voice = voices.find(v => v.name.includes("Samantha")||v.name.includes("Karen")||v.name.includes("Zira")||v.name.toLowerCase().includes("female"))
+      const voice = lang === "ja"
+        ? voices.find(v => v.lang.toLowerCase().startsWith("ja"))
+        : voices.find(v => v.name.includes("Samantha")||v.name.includes("Karen")||v.name.includes("Zira")||v.name.toLowerCase().includes("female"))
       if (voice) utt.voice = voice
       utt.onstart = () => { setIsSpeaking(true); isSpeakingRef.current = true }
       utt.onend = () => { setIsSpeaking(false); isSpeakingRef.current = false; onEnd?.() }
@@ -307,66 +320,66 @@ export function AiAssistant() {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (!SR) { setCallError("Use Chrome for voice."); return }
     if (isSpeakingRef.current) stopSpeaking()
+    const V = voiceLines[voiceLangRef.current]
     const recognition = new SR()
-    recognition.lang = "en-US"; recognition.interimResults = false; recognition.maxAlternatives = 1
+    recognition.lang = speechLocale(voiceLangRef.current); recognition.interimResults = false; recognition.maxAlternatives = 1
     recognitionRef.current = recognition
-    recognition.onstart = () => { setIsListening(true); setCallStatus("Listening...") }
+    recognition.onstart = () => { setIsListening(true); setCallStatus(V.listening) }
     recognition.onresult = async (event: any) => {
       const transcript = event.results[0][0].transcript
       setIsListening(false)
       setMessages(prev => [...prev, { id: Date.now().toString(), role:"user", content:transcript }])
       const date = parseDate(transcript)
       if (date && (isBookingOrAvailabilityIntent(transcript) || hasDateWithQuestion(transcript))) {
-        setCallStatus("Checking...")
+        setCallStatus(V.checking)
         const slots = await fetchSlots(date)
         if (slots.length > 0) {
           const top = slots.slice(0,4).map(s => s.label.split(' - ')[0]).join(', ')
-          const reply = `I have ${slots.length} slots on ${date}: ${top}. Check the chat to pick one!`
+          const reply = V.slots(slots.length, spokenDate(date, voiceLangRef.current), top)
           setMessages(prev => [...prev, { id:(Date.now()+1).toString(), role:"assistant", content:reply }])
           speak(reply, () => {
             setTab("chat")
-            setMessages(prev => [...prev, { id:(Date.now()+2).toString(), role:"assistant", content:`Here are my times on ${date}:`, type:"slots", meta:{slots,date} }])
+            setMessages(prev => [...prev, { id:(Date.now()+2).toString(), role:"assistant", content:V.slotsHeading(spokenDate(date, voiceLangRef.current)), type:"slots", meta:{slots,date} }])
           })
         } else {
-          const reply = `Nothing available on ${date}. Try another date?`
+          const reply = V.noSlots(spokenDate(date, voiceLangRef.current))
           setMessages(prev => [...prev, { id:(Date.now()+1).toString(), role:"assistant", content:reply }])
           speak(reply, () => { if (isCallActiveRef.current) { setCallStatus(""); startListening() } })
         }
         return
       }
       if (isBookingOrAvailabilityIntent(transcript)) {
-        const reply = "Sure! What date works for you?"
+        const reply = V.askDate
         setMessages(prev => [...prev, { id:(Date.now()+1).toString(), role:"assistant", content:reply }])
         speak(reply, () => { if (isCallActiveRef.current) { setCallStatus(""); startListening() } })
         return
       }
       if (date) {
-        setCallStatus("Checking...")
+        setCallStatus(V.checking)
         const slots = await fetchSlots(date)
         if (slots.length > 0) {
           const top = slots.slice(0,4).map(s => s.label.split(' - ')[0]).join(', ')
-          const reply = `${slots.length} slots: ${top}. See chat to pick.`
+          const reply = V.slots(slots.length, spokenDate(date, voiceLangRef.current), top)
           setMessages(prev => [...prev, { id:(Date.now()+1).toString(), role:"assistant", content:reply }])
           speak(reply, () => {
             setTab("chat")
-            setMessages(prev => [...prev, { id:(Date.now()+2).toString(), role:"assistant", content:`My times on ${date}:`, type:"slots", meta:{slots,date} }])
+            setMessages(prev => [...prev, { id:(Date.now()+2).toString(), role:"assistant", content:V.slotsHeading(spokenDate(date, voiceLangRef.current)), type:"slots", meta:{slots,date} }])
           })
         } else {
-          const reply = `Hmm, nothing on ${date}. Another date?`
+          const reply = V.noSlots(spokenDate(date, voiceLangRef.current))
           setMessages(prev => [...prev, { id:(Date.now()+1).toString(), role:"assistant", content:reply }])
           speak(reply, () => { if (isCallActiveRef.current) { setCallStatus(""); startListening() } })
         }
         return
       }
-      setCallStatus("Thinking...")
+      setCallStatus(V.thinking)
       try {
-        const res = await fetch("/api/chat", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ message:transcript, history: chatHistory(messages), mode:"voice" }) })
+        const res = await fetch("/api/chat", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ message:transcript, history: chatHistory(messagesRef.current), mode:"voice" }) })
         const data = await res.json()
         const reply = data.reply?.replace(/\[BOOKING_LINK\]/g,'') || ''
-        setMessages(prev => [...prev, { id:(Date.now()+1).toString(), role:"assistant", content:reply }])
-        const short = reply.length > 150 ? reply.slice(0,150)+'...' : reply
-        speak(short, () => { if (isCallActiveRef.current) { setCallStatus(""); startListening() } })
-      } catch { setCallStatus("Error. Tap mic.") }
+        setMessages(prev => [...prev, { id:(Date.now()+1).toString(), role:"assistant", content:reply, sources:data.sources }])
+        speak(spokenReply(reply, voiceLangRef.current === "ja" ? 90 : 150), () => { if (isCallActiveRef.current) { setCallStatus(""); startListening() } })
+      } catch { setCallStatus(V.error) }
     }
     recognition.onerror = (event: any) => {
       setIsListening(false)
@@ -379,7 +392,7 @@ export function AiAssistant() {
 
   const startCall = () => {
     setIsCallActive(true); isCallActiveRef.current = true; setCallError(null); setCallStatus("")
-    speak("Hey! I'm Momoyo. What can I help you with?", () => { setCallStatus(""); startListening() })
+    speak(voiceLines[voiceLangRef.current].greeting, () => { setCallStatus(""); startListening() })
   }
 
   const endCall = () => {
@@ -447,6 +460,14 @@ export function AiAssistant() {
                   <div>
                     <h4 className="text-lg font-semibold text-foreground">Momoyo</h4>
                     <p className="text-sm text-muted-foreground mt-1">Voice call &middot; Ask anything or book a meeting</p>
+                    <div role="group" aria-label="Call language" className="mt-4 inline-flex rounded-full border border-border p-1 text-sm">
+                      {([["en", "English"], ["ja", "日本語"]] as const).map(([code, label]) => (
+                        <button key={code} type="button" onClick={() => setVoiceLang(code)} aria-pressed={voiceLang === code}
+                          className={`rounded-full px-4 py-1.5 transition-colors ${voiceLang === code ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
                     {callError && <p className="text-xs text-destructive mt-2">{callError}</p>}
                   </div>
                   <button onClick={startCall}
@@ -473,7 +494,7 @@ export function AiAssistant() {
                   <div>
                     <h4 className="text-lg font-semibold text-white">Momoyo</h4>
                     <p className="text-sm text-white/60 mt-0.5">
-                      {isListening ? "Listening..." : isSpeaking ? "Speaking..." : callStatus || formatDuration(callDuration)}
+                      {isListening ? L.listening : isSpeaking ? L.speaking : callStatus || formatDuration(callDuration)}
                     </p>
                   </div>
 
@@ -481,7 +502,7 @@ export function AiAssistant() {
                     <div className="w-full max-h-32 overflow-y-auto rounded-xl bg-white/5 backdrop-blur-sm px-4 py-3">
                       {messages.slice(-4).map(msg => (
                         <div key={msg.id} className={`text-xs mb-1 ${msg.role === "user" ? "text-right text-white/80" : "text-left text-white/50"}`}>
-                          <span className="font-semibold">{msg.role === "user" ? "You" : "Momoyo"}:</span>{" "}
+                          <span className="font-semibold">{msg.role === "user" ? L.you : "Momoyo"}:</span>{" "}
                           {msg.content.replace(/\[BOOKING_LINK\]/g, "").slice(0, 80)}{msg.content.length > 80 ? "..." : ""}
                         </div>
                       ))}
@@ -514,7 +535,7 @@ export function AiAssistant() {
                     </button>
                   </div>
                   <p className="text-[10px] text-white/30 mt-1">
-                    {isSpeaking ? "Tap chat icon to interrupt" : isListening ? "Listening..." : "Tap mic to speak"}
+                    {isSpeaking ? L.hintInterrupt : isListening ? L.listening : L.hintMic}
                   </p>
                 </div>
               )}

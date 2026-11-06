@@ -33,7 +33,8 @@ export async function POST(req: Request) {
     const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'xi-api-key': key },
-      body: JSON.stringify({ text }),
+      // The multilingual model speaks both English and Japanese in the same voice.
+      body: JSON.stringify({ text, model_id: process.env.ELEVENLABS_MODEL || 'eleven_multilingual_v2' }),
     })
 
     if (!resp.ok) {
