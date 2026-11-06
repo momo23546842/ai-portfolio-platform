@@ -1,6 +1,6 @@
 // Single source of truth for what the site shows and what the digital twin may say about me.
 // Both the Career section and the chat's retrieval (lib/rag.ts) read from here, so the page and
-// the AI can't drift apart. Facts follow my 職務経歴書 / 履歴書. Each entry is written in
+// the AI can't drift apart. Facts follow my CV and résumé. Each entry is written in
 // Japanese and English so a question in either language finds it.
 //
 // No imports: kept dependency-free so it can be tested with plain Node.
@@ -217,7 +217,7 @@ export const certifications: Bilingual[] = [
   { ja: 'TOEIC Listening & Reading 825点（2026年8月）', en: 'TOEIC Listening & Reading 825 (August 2026)' },
 ]
 
-/** Questions people often ask, answered in my own words (from my 職務経歴書). */
+/** Questions people often ask, answered in my own words (from my CV). */
 export const faqs: { q: Bilingual; a: Bilingual }[] = [
   {
     q: { ja: 'なぜ管理栄養士からITに進んだのですか？', en: 'Why did you move from dietetics to IT?' },

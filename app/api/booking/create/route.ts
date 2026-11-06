@@ -146,7 +146,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // DB保存 - try to save `meetLink` if the schema supports it, otherwise retry without it
+    // Save to DB - try to save `meetLink` if the schema supports it, otherwise retry without it
     let booking
     try {
       booking = await prisma.booking.create({
@@ -177,7 +177,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // メール送信（失敗しても予約は成功扱い）
+    // Send notification emails (the booking still succeeds if this fails)
     const guestEmailRes = await sendBookingConfirmationToGuest({
       guestName: name,
       guestEmail: email,

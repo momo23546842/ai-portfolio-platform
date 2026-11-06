@@ -3,120 +3,130 @@
 ## 2026/02/22
 
 ### ✅ Phase 1 - Environment Setup
-- Next.jsプロジェクト作成（momoyo-ai）
-- GitHubにリポジトリ作成・push
-- README.md作成（英語・日本語）
-- IMPLEMENTATION_PLAN.md作成
-- AGENT.md作成
-- Neon DBセットアップ（Vercel経由）
-- Prisma導入・スキーマ定義・マイグレーション（init）
-- `lib/prisma.ts` 作成（PrismaClientシングルトン）
-- Vercelに環境変数（DATABASE_URL）追加
+- Created the Next.js project (momoyo-ai)
+- Created the GitHub repository and pushed
+- Wrote README.md (English and Japanese)
+- Wrote IMPLEMENTATION_PLAN.md
+- Wrote AGENT.md
+- Set up the Neon database (through Vercel)
+- Added Prisma, defined the schema and ran the first migration (init)
+- Added `lib/prisma.ts` (PrismaClient singleton)
+- Added the `DATABASE_URL` environment variable on Vercel
 
-### 🚧 Phase 2 - Profile Page UI（進行中）
-- `app/page.tsx` を1ページスクロール型レイアウトに変更
-- 各セクションの空コンポーネント作成
+### 🚧 Phase 2 - Profile Page UI (in progress)
+- Changed `app/page.tsx` to a single scrolling page
+- Added empty components for each section
   - Hero / About / Career / Skills / Works / Booking / Contact
-- `app/api/profile/route.ts` 作成
-  - GETリクエストでDBのProfileテーブルからデータを取得して返すAPI
-  - VapiのFunction CallingからこのAPIを呼び出す予定
+- Added `app/api/profile/route.ts`
+  - A GET endpoint that returns the Profile table from the database
+  - Planned to be called from Vapi function calling
 
-### 📝 次にやること
-- `/api/career` エンドポイント作成
-- `/api/skills` エンドポイント作成
-- DBにプロフィール・経歴・スキルデータを登録
-- UIはV0を使って後から作成予定
+### 📝 Next
+- Add the `/api/career` endpoint
+- Add the `/api/skills` endpoint
+- Load profile, career and skills data into the database
+- Build the UI later with v0
 
 ---
 
 ## 2026/02/28
 
-### ✅ Google Calendar 予約機能の実装・修正
+### ✅ Google Calendar booking: implementation and fixes
 
-#### Booking コンポーネント修正
-- `components/booking.tsx` がビルドエラーで壊れていた（古いコードと新しいコードが混在）
-- 完全に書き直し：4ステップUI（カレンダー → 時間スロット → フォーム → 確認画面）
+#### Booking component
+- `components/booking.tsx` failed to build (old and new code were mixed together)
+- Rewrote it as a 4-step UI (calendar → time slots → form → confirmation)
 
 #### Availability API (`app/api/booking/availability/route.ts`)
-- **問題1**: `googleapis` パッケージがVercelサーバーレス環境でクラッシュ（バンドルサイズ超過）
-  - 解決：`googleapis` を削除し、直接REST API + 手動JWT認証に切り替え（Node.js `crypto` で署名）
-- **問題2**: タイムゾーンオフセットが `+11:00` にハードコードされていた
-  - 解決：AEST（+10:00）/ AEDT（+11:00）を月に応じて動的に切り替え
-- **問題3**: エラー時にスロットが全く表示されなかった
-  - 解決：Google Calendar APIがエラーでもスロットを返すように変更（全スロットavailableとして表示）
+- **Problem 1**: the `googleapis` package crashed in Vercel's serverless runtime (bundle too large)
+  - Fix: removed `googleapis` and called the REST API directly, with JWT auth signed by Node.js `crypto`
+- **Problem 2**: the time zone offset was hard-coded to `+11:00`
+  - Fix: switch between AEST (+10:00) and AEDT (+11:00) by date
+- **Problem 3**: no slots were shown when the API returned an error
+  - Fix: return slots even when the Google Calendar API fails (all shown as available)
 
 #### Create API (`app/api/booking/create/route.ts`)
-- **問題1**: `googleapis` 依存を同様にREST API + JWTに切り替え
-- **問題2**: `attendees` フィールドで403エラー
-  - 原因：無料Googleアカウントではサービスアカウントから他ユーザーを招待できない
-  - 解決：`attendees` を削除し、予約者情報をイベントの説明欄（description）に記載する方式に変更
-- **問題3**: 403 Calendar error
-  - 原因：サービスアカウントにカレンダーの書き込み権限がなかった + `attendees` の制限
-  - 解決：Google カレンダーの共有設定で「Make changes to events」を付与 + attendees削除
+- **Problem 1**: replaced the `googleapis` dependency with REST + JWT in the same way
+- **Problem 2**: 403 error on the `attendees` field
+  - Cause: on a free Google account, a service account can't invite other users
+  - Fix: removed `attendees` and put the booker's details in the event description
+- **Problem 3**: 403 Calendar error
+  - Cause: the service account had no write access to the calendar, plus the `attendees` limit
+  - Fix: granted "Make changes to events" in the calendar's sharing settings and removed attendees
 
-#### Vercel 環境変数の問題
-- `GOOGLE_PRIVATE_KEY`: Vercelで「whitespace and return characters」警告 → 1行で貼り直しで解決
-- `GOOGLE_CALENDAR_ID`: 変数名にタイポ（`G`が抜けていた） → 修正後Redeployで解決
-- 環境変数変更後にRedeployが必要（設定だけでは反映されない）
+#### Vercel environment variables
+- `GOOGLE_PRIVATE_KEY`: Vercel warned about "whitespace and return characters" → fixed by pasting it as one line
+- `GOOGLE_CALENDAR_ID`: typo in the variable name (missing `G`) → fixed and redeployed
+- A redeploy is needed after changing environment variables (saving them is not enough)
 
-#### ヘッダーナビ
-- `components/header.tsx` の `navLinks` に「Booking」リンクを追加
+#### Header navigation
+- Added a "Booking" link to `navLinks` in `components/header.tsx`
 
-### ✅ AIアシスタント チャット/Voice 予約連携
+### ✅ AI assistant: booking from chat and voice
 
-#### チャット内予約フロー
-- チャットで「Book a meeting on March 10」→ 空き時間ボタン表示 → 時間選択 → フォーム入力 → 予約完了（全てチャット内で完結）
-- 日付パーサー実装：「March 10」「3/10」「3月10日」「next Tuesday」「tomorrow」「明日」に対応
-- 予約キーワードなしでも日付+質問（「What's free on March 10?」「3月10日空いてる？」）で空き時間を表示
+#### Booking inside the chat
+- "Book a meeting on March 10" in the chat → time slot buttons → pick a time → fill in the form → booked, all inside the chat
+- Date parser: understands "March 10", "3/10", "3月10日", "next Tuesday", "tomorrow" and "明日"
+- A date plus a question ("What's free on March 10?", "3月10日空いてる？") shows slots even without a booking keyword
 
-#### Voice改善
-- **短い応答**: 挨拶・スロット紹介を大幅に短縮（150文字超は切り詰め）
-- **割り込み対応**: AI発話中に「Interrupt」ボタンでユーザーが即座に発言可能
-- **話すスピード**: 1.0 → 1.15倍に高速化
-- **Voice→Chat連携**: 音声で日付を言う → 短く空き時間読み上げ → 自動でChatタブに切り替え → スロット選択UI表示
-- **日付対応**: 音声でも「March 10」「next Friday」で空き時間検索可能
+#### Voice improvements
+- **Shorter replies**: much shorter greeting and slot announcements (anything over 150 characters is cut)
+- **Interrupting**: an "Interrupt" button lets the visitor speak while the AI is talking
+- **Speaking speed**: 1.0 → 1.15×
+- **Voice → chat handoff**: say a date → the AI reads a short list of slots → switches to the Chat tab → shows the slot picker
+- **Dates by voice**: "March 10" and "next Friday" also work in voice
 
 #### Chat API (`app/api/chat/route.ts`)
-- システムプロンプトに予約検知ルールを追加（`[BOOKING_LINK]` タグ生成）
-- フォールバック関数にも予約キーワード検知を追加
+- Added booking detection rules to the system prompt (it outputs the `[BOOKING_LINK]` tag)
+- Added booking keyword detection to the fallback function too
 
 ---
 
-## メモ
-- UIデザインはV0で作成予定（Next.js + Tailwindと相性が良い）
-- `npx` をつけないとprismaコマンドが動かない（Windows環境）
-- Windowsの一時フォルダ権限エラーは `$env:TEMP = "C:\Temp"` で解決
+## Notes
+- The UI will be designed with v0 (works well with Next.js + Tailwind)
+- Prisma commands only work with `npx` (Windows)
+- Windows temp folder permission errors were fixed with `$env:TEMP = "C:\Temp"`
 
-### 未解決の問題
-- VapiのFunction CallingでツールはCompletedになるがLLMがデータを使えない
-  - 原因：VapiがツールのレスポンスをLLMに正しく渡せていない可能性
-  - 試したこと：レスポンスをラップ、モデル変更、システムプロンプト変更
-  - 次回：Custom Functionsで試す、またはVapiのServerURLを使ったWebhook方式を検討
+### Open issue
+- With Vapi function calling, the tool shows "Completed" but the LLM can't use the data
+  - Likely cause: Vapi isn't passing the tool response to the LLM correctly
+  - Tried: wrapping the response, changing the model, changing the system prompt
+  - Next: try Custom Functions, or a webhook with Vapi's Server URL
 
-## Vercelデプロイ時のトラブルシューティング
+## Troubleshooting Vercel deployments
 
-### 問題1：重複定義（Duplicate identifier）
-- 原因：V0のUIをマージした際にcomponents/ui/内で同じimportやコンポーネントが重複
-- 解決：components/ui/内の重複ブロック・importを削除
+### Problem 1: Duplicate identifier
+- Cause: merging the v0 UI duplicated imports and components in components/ui/
+- Fix: removed the duplicate blocks and imports in components/ui/
 
-### 問題2：Prismaクライアントが無い
-- 原因：prisma/schema.prismaとmigrationsがコミットされていなかった
-- 解決：npx prisma generateを実行し、package.jsonにpostinstallを追加
-  "postinstall": "prisma generate"
+### Problem 2: Prisma client missing
+- Cause: prisma/schema.prisma and the migrations were not committed
+- Fix: ran `npx prisma generate` and added a postinstall script to package.json:
+  `"postinstall": "prisma generate"`
 
-### 問題3：ライブラリ不足
-- 原因：V0のUIで使用しているRadixなどのライブラリが未インストール
-- 解決：npm install @radix-ui/react-accordion などを追加
+### Problem 3: Missing libraries
+- Cause: Radix and other libraries used by the v0 UI were not installed
+- Fix: installed them, e.g. `npm install @radix-ui/react-accordion`
 
-### 問題4：Windows一時フォルダ権限エラー
-- 原因：shadcn実行時にTempフォルダへのアクセス権限エラー
-- 解決：$env:TEMP = "C:\Temp" で一時フォルダを変更してから実行
+### Problem 4: Windows temp folder permission error
+- Cause: shadcn couldn't access the Temp folder
+- Fix: changed the temp folder with `$env:TEMP = "C:\Temp"` before running it
 
-### 問題5：googleapis がVercelサーバーレスでクラッシュ（2026/02/28）
-- 原因：`googleapis` パッケージが巨大でサーバーレス環境のバンドルサイズ制限に引っかかる
-- 解決：`googleapis` を使わず、直接REST API + 手動JWT署名（Node.js crypto）で Google Calendar API を呼び出す
+### Problem 5: googleapis crashed on Vercel serverless (2026/02/28)
+- Cause: the `googleapis` package is huge and hits the serverless bundle size limit
+- Fix: call the Google Calendar API directly over REST with a hand-signed JWT (Node.js crypto)
 
-### 問題6：Google Calendar API 403エラー（2026/02/28）
-- 原因1：無料Googleアカウントではサービスアカウントから `attendees`（招待者）を追加できない
-- 原因2：`GOOGLE_CALENDAR_ID` の環境変数名にタイポがあった
-- 解決：`attendees` を削除（予約者情報はdescriptionに記載）、環境変数名を修正、Redeploy
+### Problem 6: Google Calendar API 403 error (2026/02/28)
+- Cause 1: on a free Google account, a service account can't add `attendees`
+- Cause 2: typo in the `GOOGLE_CALENDAR_ID` variable name
+- Fix: removed `attendees` (booker details go in the description), fixed the variable name and redeployed
+
+## 2026/11 — Portfolio refresh
+
+- Added RAG: BM25 retrieval over bilingual passages, with the sources shown under each answer
+- Added conversation memory (the browser sends recent turns; the server validates and limits them)
+- Made `lib/profile-data.ts` the single source for the page, the AI and the MCP tools
+- Removed a test email API that could send mail to any address
+- Added a rate limit and a message length limit to the chat API
+- Greetings and "what can you do?" now get a self-introduction instead of a refusal
+- Added tests (`npm test`) and GitHub Actions
