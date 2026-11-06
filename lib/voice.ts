@@ -68,3 +68,23 @@ export function spokenReply(text: string, maxChars = 150) {
   }
   return out.trim() || clean.slice(0, maxChars).trim() + '…'
 }
+
+/**
+ * Split text into short pieces for the browser's speechSynthesis. Chrome tends to stop a
+ * long utterance part-way, so each sentence (or, for a long sentence, each clause) is
+ * spoken as its own utterance.
+ */
+export function splitForSpeech(text: string, maxChars = 80) {
+  const sentences = text.match(/[^.!?。！？]+[.!?。！？]*/g)?.map((s) => s.trim()).filter(Boolean) ?? []
+  const pieces: string[] = []
+  for (const s of sentences) {
+    if (s.length <= maxChars) { pieces.push(s); continue }
+    let current = ''
+    for (const part of s.match(/[^,、，]+[,、，]?/g) ?? [s]) {
+      if (current && (current + part).length > maxChars) { pieces.push(current.trim()); current = '' }
+      current += part
+    }
+    if (current.trim()) pieces.push(current.trim())
+  }
+  return pieces
+}

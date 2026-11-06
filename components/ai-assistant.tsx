@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { speechLocale, defaultVoiceLang, voiceLines, spokenDate, spokenReply, type VoiceLang } from "@/lib/voice"
+import { speechLocale, defaultVoiceLang, voiceLines, spokenDate, spokenReply, splitForSpeech, type VoiceLang } from "@/lib/voice"
 import { Send, Mic, MicOff, Phone, PhoneOff, MessageCircle, CalendarDays, Clock, Check, Loader2, User } from "lucide-react"
 
 interface Message {
@@ -55,7 +55,10 @@ export function AiAssistant() {
   const isCallActiveRef = useRef(false)
   const isSpeakingRef = useRef(false)
   const callTimerRef = useRef<any>(null)
+  // Utterances are kept in a ref: Chrome can drop one that is garbage-collected mid-speech.
+  const utterancesRef = useRef<SpeechSynthesisUtterance[]>([])
   const [voiceLang, setVoiceLang] = useState<VoiceLang>("en")
+  const [voiceNote, setVoiceNote] = useState("")
   const voiceLangRef = useRef<VoiceLang>("en")
   // The recognition callbacks outlive renders, so they read the latest messages from a ref.
   const messagesRef = useRef<Message[]>([])
@@ -262,25 +265,39 @@ export function AiAssistant() {
       }
     } catch {}
     // stop Web Speech if active
+    utterancesRef.current = []
     try { window.speechSynthesis?.cancel() } catch {}
     setIsSpeaking(false); isSpeakingRef.current = false
   }
 
   const fallbackToWebSpeech = (clean: string, onEnd?: () => void) => {
     if (!window.speechSynthesis) { onEnd?.(); return }
+    const lang = voiceLangRef.current
+    const pieces = splitForSpeech(clean, lang === "ja" ? 40 : 120)
+    if (!pieces.length) { onEnd?.(); return }
     try {
       window.speechSynthesis.cancel()
-      const utt = new SpeechSynthesisUtterance(clean)
-      const lang = voiceLangRef.current
-      utt.rate = lang === "ja" ? 1.05 : 1.15; utt.pitch = 1.1; utt.lang = speechLocale(lang)
       const voices = window.speechSynthesis.getVoices()
       const voice = lang === "ja"
-        ? voices.find(v => v.lang.toLowerCase().startsWith("ja"))
+        ? voices.find(v => v.lang.toLowerCase().startsWith("ja") && /google|kyoko|o-ren|nanami/i.test(v.name)) || voices.find(v => v.lang.toLowerCase().startsWith("ja"))
         : voices.find(v => v.name.includes("Samantha")||v.name.includes("Karen")||v.name.includes("Zira")||v.name.toLowerCase().includes("female"))
-      if (voice) utt.voice = voice
-      utt.onstart = () => { setIsSpeaking(true); isSpeakingRef.current = true }
-      utt.onend = () => { setIsSpeaking(false); isSpeakingRef.current = false; onEnd?.() }
-      window.speechSynthesis.speak(utt)
+      const utterances = pieces.map((piece, i) => {
+        const utt = new SpeechSynthesisUtterance(piece)
+        utt.rate = lang === "ja" ? 1.05 : 1.15; utt.pitch = 1.1; utt.lang = speechLocale(lang)
+        if (voice) utt.voice = voice
+        if (i === 0) utt.onstart = () => { setIsSpeaking(true); isSpeakingRef.current = true }
+        if (i === pieces.length - 1) {
+          utt.onend = () => { utterancesRef.current = []; setIsSpeaking(false); isSpeakingRef.current = false; onEnd?.() }
+        }
+        utt.onerror = (ev) => {
+          // "interrupted"/"canceled" means the visitor stopped it; anything else ends the turn.
+          if (ev.error !== "interrupted" && ev.error !== "canceled") { utterancesRef.current = []; setIsSpeaking(false); isSpeakingRef.current = false; onEnd?.() }
+        }
+        return utt
+      })
+      utterancesRef.current = utterances
+      // Speaking straight after cancel() is sometimes ignored by Chrome; queue on the next tick.
+      setTimeout(() => utterances.forEach(u => window.speechSynthesis.speak(u)), 50)
     } catch (e) {
       setIsSpeaking(false); isSpeakingRef.current = false; onEnd?.()
     }
@@ -300,7 +317,14 @@ export function AiAssistant() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: clean }),
         })
-        if (!res.ok) throw new Error('ElevenLabs proxy failed')
+        if (!res.ok) {
+          // Tells you (in the browser console) why the site fell back to the browser voice.
+          const reason = await res.text().catch(() => "")
+          console.warn(`ElevenLabs unavailable (${res.status}): ${reason}. Using the browser voice instead.`)
+          setVoiceNote(voiceLangRef.current === "ja" ? "ブラウザの音声で読み上げています" : "Using the browser voice")
+          throw new Error('ElevenLabs proxy failed')
+        }
+        setVoiceNote("")
         const blob = await res.blob()
         const url = URL.createObjectURL(blob)
         const audio = new Audio(url)
@@ -378,7 +402,7 @@ export function AiAssistant() {
         const data = await res.json()
         const reply = data.reply?.replace(/\[BOOKING_LINK\]/g,'') || ''
         setMessages(prev => [...prev, { id:(Date.now()+1).toString(), role:"assistant", content:reply, sources:data.sources }])
-        speak(spokenReply(reply, voiceLangRef.current === "ja" ? 90 : 150), () => { if (isCallActiveRef.current) { setCallStatus(""); startListening() } })
+        speak(spokenReply(reply, voiceLangRef.current === "ja" ? 120 : 200), () => { if (isCallActiveRef.current) { setCallStatus(""); startListening() } })
       } catch { setCallStatus(V.error) }
     }
     recognition.onerror = (event: any) => {
@@ -496,6 +520,7 @@ export function AiAssistant() {
                     <p className="text-sm text-white/60 mt-0.5">
                       {isListening ? L.listening : isSpeaking ? L.speaking : callStatus || formatDuration(callDuration)}
                     </p>
+                    {voiceNote && <p className="text-xs text-white/40 mt-1">{voiceNote}</p>}
                   </div>
 
                   {messages.length > 1 && (

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { speechLocale, defaultVoiceLang, voiceLines, spokenDate, spokenReply } from '../lib/voice.ts'
+import { speechLocale, defaultVoiceLang, voiceLines, spokenDate, spokenReply, splitForSpeech } from '../lib/voice.ts'
 
 test('the call listens and speaks in the chosen language', () => {
   assert.equal(speechLocale('ja'), 'ja-JP')
@@ -30,4 +30,13 @@ test('long replies are cut at a sentence end, not mid-sentence', () => {
   assert.equal(spokenReply(ja, 50), 'AusBizではAIエージェントを開発しました。チームリーダーとして進捗を管理しました。')
   assert.equal(spokenReply(ja, 30), 'AusBizではAIエージェントを開発しました。')
   assert.ok(spokenReply('x'.repeat(200), 50).endsWith('…'))
+})
+
+test('browser speech is split into sentences, and long sentences into clauses', () => {
+  assert.deepEqual(splitForSpeech('こんにちは。片岡です！よろしくお願いします。'), ['こんにちは。', '片岡です！', 'よろしくお願いします。'])
+  assert.deepEqual(splitForSpeech('Hi there. I am Momoyo.'), ['Hi there.', 'I am Momoyo.'])
+  const long = 'インターンではチームリーダーとして、タスクの割り振りと進捗の管理を担当し、プロジェクトマネージャーとの調整も行いました。'
+  const pieces = splitForSpeech(long, 30)
+  assert.ok(pieces.length > 1 && pieces.every((p) => p.length <= 30), JSON.stringify(pieces))
+  assert.equal(pieces.join(''), long)
 })
