@@ -99,9 +99,21 @@ export function search(index: Index, query: string, k = 5, minScore = 0.5): Scor
 }
 
 /** Passages formatted for the system prompt, numbered so the model can stay close to them. */
-export function formatContext(chunks: Chunk[]): string {
+/**
+ * Keep only the lines of a bilingual passage that are in the answer's language. A small model
+ * given both languages side by side tends to mix them, or translate stiffly. Lines that carry
+ * both (labels like "使った技術 / Tech: …") are kept for either language.
+ */
+export function localizePassage(text: string, lang?: 'ja' | 'en'): string {
+  if (!lang) return text
+  const lines = text.split('\n')
+  const kept = lines.filter((l) => l.includes(' / ') || (lang === 'ja' ? CJK.test(l) : !CJK.test(l)))
+  return (kept.length ? kept : lines).join('\n')
+}
+
+export function formatContext(chunks: Chunk[], lang?: 'ja' | 'en'): string {
   if (!chunks.length) return '(No matching information found.)'
-  return chunks.map((c, i) => `[${i + 1}] ${c.title}\n${c.text}`).join('\n\n')
+  return chunks.map((c, i) => `[${i + 1}] ${c.title}\n${localizePassage(c.text, lang)}`).join('\n\n')
 }
 
 // ─── Conversation memory ────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 // Run with: npm test   (Node 22+, uses built-in type stripping; no extra packages)
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { tokenize, buildIndex, search, sanitizeHistory, retrievalQuery, detectLanguage, formatContext, MAX_MESSAGE_CHARS, detectSmallTalk, smallTalkReply } from '../lib/rag.ts'
+import { tokenize, buildIndex, search, sanitizeHistory, retrievalQuery, detectLanguage, formatContext, MAX_MESSAGE_CHARS, detectSmallTalk, smallTalkReply, localizePassage } from '../lib/rag.ts'
 import { profileChunks, timeline, periodText } from '../lib/profile-data.ts'
 
 const index = buildIndex(profileChunks())
@@ -95,4 +95,11 @@ test('greetings and "what can you do" are recognised as small talk', () => {
 test('the fixed self-introduction answers in the visitor language', () => {
   assert.match(smallTalkReply('greeting', 'en'), /^Hi! I'm Momoyo/)
   assert.match(smallTalkReply('capabilities', 'ja'), /AIデジタルツイン/)
+})
+
+test('the model only sees passage lines in the answer language', () => {
+  const text = 'インターンで開発しました\nI built it in my internship\n使った技術 / Tech: Next.js'
+  assert.equal(localizePassage(text, 'ja'), 'インターンで開発しました\n使った技術 / Tech: Next.js')
+  assert.equal(localizePassage(text, 'en'), 'I built it in my internship\n使った技術 / Tech: Next.js')
+  assert.equal(localizePassage(text), text)
 })

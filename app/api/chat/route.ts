@@ -25,23 +25,37 @@ async function databaseChunks(): Promise<Chunk[]> {
 }
 
 function systemPrompt(context: string, lang: 'ja' | 'en', mode: string) {
-  return `You ARE Momoyo Kataoka (片岡 桃世), answering visitors to your portfolio site in the first person.
+  const style = lang === 'ja'
+    ? `Reply in natural, warm spoken Japanese (です・ます調), the way I would talk to someone at a casual interview.
+- Write it as natural Japanese, not a translation: short sentences, no bullet points, no English words except names (AusBiz, Next.js, …).
+- Don't copy the information word for word; say it in your own words.`
+    : `Reply in natural, warm, conversational English.
+- Don't copy the information word for word; say it in your own words.`
+  const length = mode === 'voice'
+    ? 'This reply is spoken aloud in a voice call: 2–3 short sentences, like talking. No lists, markdown or URLs.'
+    : 'Keep it conversational: usually 2–4 sentences, more only if the visitor asks for detail.'
 
-ANSWER ONLY FROM THE INFORMATION BELOW.
-- Use only facts in the numbered passages. Never invent companies, dates, numbers, tools or results.
-- If the passages don't cover the question, say honestly that you can't answer that here, and offer a meeting instead.
-- Reply in ${lang === 'ja' ? 'Japanese (丁寧語, natural and warm)' : 'English'}, the language the visitor used.
-- ${mode === 'voice' ? 'This answer is spoken aloud: 1–2 short sentences, no lists, no markdown, no URLs.' : 'Keep it to 2–4 sentences unless the visitor asks for detail.'}
-- A greeting, or a question about what you can do, is not off-topic: greet back, introduce yourself in one sentence, and suggest two or three example questions (career, internships, projects, skills, booking a meeting).
+  return `You ARE Momoyo Kataoka (片岡 桃世). You speak as yourself in the first person to visitors of your portfolio site. You are friendly, warm and professional, and you enjoy talking about your work.
 
-WHO YOU ARE (keep this framing):
-- An IT student in Sydney with hands-on internship experience in generative AI / full-stack development. Never give yourself a senior or full-time engineering title.
+HOW TO TALK
+${style}
+- ${length}
+- Vary how you start; don't open every reply with a greeting or your name.
+- Answer the question first, then add one relevant detail or a natural follow-up.
+
+FACTS
+- Facts (companies, dates, numbers, tools, results) come only from the information below. Never invent them.
+- If the visitor asks about something the information doesn't cover, say so lightly and naturally (e.g. that you'd be happy to talk about it in a meeting) — don't apologise at length.
+- A greeting, or a question about what you can do, is not off-topic: greet back, introduce yourself briefly, and suggest a couple of things they could ask (career, internships, projects, skills, booking a meeting).
+
+WHO YOU ARE (keep this framing)
+- An IT student in Sydney with hands-on internship experience in generative AI and full-stack development. Never give yourself a senior or full-time engineering title.
 - A Registered Dietitian licensed in Japan (not in Australia).
 - Aiming to work as a generative AI engineer building LLM and RAG applications.
 
 BOOKING: if the visitor wants to meet or talk, answer warmly and include the exact tag [BOOKING_LINK]; it becomes a button. Hours: Monday–Friday, 9:00–18:00 Sydney time.
 
-INFORMATION:
+INFORMATION ABOUT ME
 ${context}`
 }
 
@@ -49,7 +63,7 @@ async function callGroq(messages: { role: 'system' | 'user' | 'assistant'; conte
   const apiKey = process.env.GROQ_API_KEY
   if (!apiKey) throw new Error('GROQ_API_KEY not set')
   const groq = new Groq({ apiKey })
-  const response = await groq.chat.completions.create({ model: GROQ_MODEL, messages, temperature: 0.3 })
+  const response = await groq.chat.completions.create({ model: GROQ_MODEL, messages, temperature: 0.6 })
   return String(response?.choices?.[0]?.message?.content ?? '')
 }
 
@@ -119,27 +133,30 @@ export async function POST(req: NextRequest) {
     // Retrieval: find the passages that answer this question (and the one before, for follow-ups).
     const index = buildIndex([...staticChunks, ...(await databaseChunks())])
     const smallTalk = detectSmallTalk(message)
-    let hits = search(index, retrievalQuery(message, history), TOP_K)
-    // A greeting matches no passage; give the model the profile so it can introduce itself.
-    if (smallTalk && !hits.length) hits = staticChunks.filter((c) => c.id === 'profile' || c.id === 'goal').map((c) => ({ ...c, score: 0 }))
+    const hits = search(index, retrievalQuery(message, history), TOP_K)
+    // The model always gets my profile, so it knows who it is speaking as; the retrieved
+    // passages carry the facts for this question.
+    const base = staticChunks.filter((c) => (c.id === 'profile' || c.id === 'goal') && !hits.some((h) => h.id === c.id))
 
     await saveConversation(sessionId, 'user', message, mode)
 
     let reply: string
+    let fallback = false
     try {
       reply = await callGroq([
-        { role: 'system', content: systemPrompt(formatContext(hits), lang, mode) },
+        { role: 'system', content: systemPrompt(formatContext([...hits, ...base], lang), lang, mode) },
         ...history,
         { role: 'user', content: message },
       ])
       if (!reply.trim()) throw new Error('empty reply')
     } catch (e) {
       console.error('Groq call failed, answering from the retrieved passage', e)
+      fallback = true
       reply = smallTalk ? smallTalkReply(smallTalk, lang) : fallbackReply(message, hits, lang)
     }
 
     await saveConversation(sessionId, 'assistant', reply, mode)
-    return NextResponse.json({ reply, sources: hits.map((h) => ({ id: h.id, title: h.title })) })
+    return NextResponse.json({ reply, sources: hits.map((h) => ({ id: h.id, title: h.title })), fallback })
   } catch (err) {
     console.error(err)
     return NextResponse.json({ reply: "Sorry, I couldn't process that right now. Please try again!" }, { status: 500 })

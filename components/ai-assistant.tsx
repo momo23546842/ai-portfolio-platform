@@ -12,6 +12,8 @@ interface Message {
   meta?: any
   /** Passages the answer was grounded in (returned by /api/chat) */
   sources?: { id: string; title: string }[]
+  /** True when the AI was unreachable and the reply is a profile excerpt */
+  fallback?: boolean
 }
 
 /** The recent plain-text turns, sent with each question so follow-ups make sense. */
@@ -202,7 +204,7 @@ export function AiAssistant() {
     try {
       const res = await fetch("/api/chat", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ message:text, history: chatHistory(messages), mode:"chat" }) })
       const data = await res.json()
-      setMessages(prev => [...prev, { id:(Date.now()+1).toString(), role:"assistant", content:data.reply ?? data.error ?? "", sources:data.sources }])
+      setMessages(prev => [...prev, { id:(Date.now()+1).toString(), role:"assistant", content:data.reply ?? data.error ?? "", sources:data.sources, fallback:data.fallback }])
     } catch {
       setMessages(prev => [...prev, { id:(Date.now()+1).toString(), role:"assistant", content:"Oops, something went wrong. Please try again!" }])
     }
@@ -247,6 +249,9 @@ export function AiAssistant() {
     }
     return (<>
       <span>{msg.content}</span>
+      {msg.fallback && (
+        <span className="mt-2 block text-[11px] leading-snug text-muted-foreground">AIに接続できなかったため、経歴データをそのまま表示しています / AI unavailable — showing my profile directly</span>
+      )}
       {msg.sources && msg.sources.length > 0 && (
         <span className="mt-2 block text-[11px] leading-snug text-muted-foreground">
           参照した情報 / Sources: {msg.sources.slice(0, 3).map(s => s.title).join(" · ")}
@@ -401,7 +406,7 @@ export function AiAssistant() {
         const res = await fetch("/api/chat", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ message:transcript, history: chatHistory(messagesRef.current), mode:"voice" }) })
         const data = await res.json()
         const reply = data.reply?.replace(/\[BOOKING_LINK\]/g,'') || ''
-        setMessages(prev => [...prev, { id:(Date.now()+1).toString(), role:"assistant", content:reply, sources:data.sources }])
+        setMessages(prev => [...prev, { id:(Date.now()+1).toString(), role:"assistant", content:reply, sources:data.sources, fallback:data.fallback }])
         speak(spokenReply(reply, voiceLangRef.current === "ja" ? 120 : 200), () => { if (isCallActiveRef.current) { setCallStatus(""); startListening() } })
       } catch { setCallStatus(V.error) }
     }
