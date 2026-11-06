@@ -59,6 +59,21 @@ INFORMATION ABOUT ME
 ${context}`
 }
 
+/**
+ * A short, safe reason for a failed LLM call (no keys or messages), returned with fallback
+ * replies so a broken deployment can be diagnosed from the browser console.
+ */
+function groqFailureReason(e: unknown): string {
+  const err = e as { message?: string; status?: number; error?: { error?: { code?: string } } }
+  if (err?.message === 'GROQ_API_KEY not set') return 'GROQ_API_KEY is not set on this deployment'
+  if (err?.message === 'empty reply') return 'Groq returned an empty reply'
+  if (typeof err?.status === 'number') {
+    const code = err.error?.error?.code
+    return `Groq returned HTTP ${err.status}${code ? ` (${code})` : ''} for model ${GROQ_MODEL}`
+  }
+  return 'Could not reach Groq'
+}
+
 async function callGroq(messages: { role: 'system' | 'user' | 'assistant'; content: string }[]) {
   const apiKey = process.env.GROQ_API_KEY
   if (!apiKey) throw new Error('GROQ_API_KEY not set')
@@ -104,11 +119,15 @@ function fallbackReply(message: string, hits: Chunk[], lang: 'ja' | 'en') {
       ? 'すみません、その質問にはここではお答えできません。よければミーティングでお話ししましょう。[BOOKING_LINK]'
       : "Sorry, I can't answer that here. Happy to talk in a meeting! [BOOKING_LINK]"
   }
-  const lines = hits[0].text.split('\n')
+  // "Tell me about yourself / your background" should start from the profile, not whichever
+  // passage happens to mention 経歴.
+  const aboutMe = /経歴|自己紹介|あなたについて|yourself|background|about you|who are you/i.test(message)
+  const top = (aboutMe && staticChunks.find((c) => c.id === 'profile')) || hits[0]
+  const lines = top.text.split('\n')
   const body = lang === 'ja' ? lines.filter((l) => /[぀-ヿ一-鿿]/.test(l)) : lines.filter((l) => !/[぀-ヿ一-鿿]/.test(l))
   const picked = body.length ? body : lines
   // Q&A passages start with the question itself; answer with what follows it.
-  const isQA = hits[0].id.startsWith('faq-') || hits[0].id.startsWith('qa-db-')
+  const isQA = top.id.startsWith('faq-') || top.id.startsWith('qa-db-')
   return (isQA && picked.length > 1 ? picked.slice(1) : picked).slice(0, 3).join(' ')
 }
 
@@ -142,6 +161,7 @@ export async function POST(req: NextRequest) {
 
     let reply: string
     let fallback = false
+    let fallbackReason: string | undefined
     try {
       reply = await callGroq([
         { role: 'system', content: systemPrompt(formatContext([...hits, ...base], lang), lang, mode) },
@@ -152,11 +172,12 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       console.error('Groq call failed, answering from the retrieved passage', e)
       fallback = true
+      fallbackReason = groqFailureReason(e)
       reply = smallTalk ? smallTalkReply(smallTalk, lang) : fallbackReply(message, hits, lang)
     }
 
     await saveConversation(sessionId, 'assistant', reply, mode)
-    return NextResponse.json({ reply, sources: hits.map((h) => ({ id: h.id, title: h.title })), fallback })
+    return NextResponse.json({ reply, sources: hits.map((h) => ({ id: h.id, title: h.title })), fallback, fallbackReason })
   } catch (err) {
     console.error(err)
     return NextResponse.json({ reply: "Sorry, I couldn't process that right now. Please try again!" }, { status: 500 })

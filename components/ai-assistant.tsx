@@ -204,6 +204,7 @@ export function AiAssistant() {
     try {
       const res = await fetch("/api/chat", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ message:text, history: chatHistory(messages), mode:"chat" }) })
       const data = await res.json()
+      if (data.fallback) console.warn(`AI unavailable: ${data.fallbackReason ?? "unknown reason"}`)
       setMessages(prev => [...prev, { id:(Date.now()+1).toString(), role:"assistant", content:data.reply ?? data.error ?? "", sources:data.sources, fallback:data.fallback }])
     } catch {
       setMessages(prev => [...prev, { id:(Date.now()+1).toString(), role:"assistant", content:"Oops, something went wrong. Please try again!" }])
