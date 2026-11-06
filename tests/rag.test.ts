@@ -1,7 +1,7 @@
 // Run with: npm test   (Node 22+, uses built-in type stripping; no extra packages)
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { tokenize, buildIndex, search, sanitizeHistory, retrievalQuery, detectLanguage, formatContext, MAX_MESSAGE_CHARS } from '../lib/rag.ts'
+import { tokenize, buildIndex, search, sanitizeHistory, retrievalQuery, detectLanguage, formatContext, MAX_MESSAGE_CHARS, detectSmallTalk, smallTalkReply } from '../lib/rag.ts'
 import { profileChunks, timeline, periodText } from '../lib/profile-data.ts'
 
 const index = buildIndex(profileChunks())
@@ -84,4 +84,15 @@ test('timeline dates are consistent (start before end, YYYY-MM)', () => {
   }
   assert.equal(periodText({ start: '2025-11', end: '2026-03' }, 'ja'), '2025年11月 – 2026年3月')
   assert.equal(periodText({ start: '2025-07', end: null }, 'en'), 'Jul 2025 – present')
+})
+
+test('greetings and "what can you do" are recognised as small talk', () => {
+  for (const m of ['hello', 'Hi!', 'こんにちは', 'はじめまして。']) assert.equal(detectSmallTalk(m), 'greeting', m)
+  for (const m of ['what can you do', 'What can you help with?', '何ができますか？', 'どんなことを聞けますか']) assert.equal(detectSmallTalk(m), 'capabilities', m)
+  for (const m of ['インターンでは何をしましたか？', 'hello, what did you study?', 'What skills do you have?']) assert.equal(detectSmallTalk(m), null, m)
+})
+
+test('the fixed self-introduction answers in the visitor language', () => {
+  assert.match(smallTalkReply('greeting', 'en'), /^Hi! I'm Momoyo/)
+  assert.match(smallTalkReply('capabilities', 'ja'), /AIデジタルツイン/)
 })

@@ -148,3 +148,27 @@ export function retrievalQuery(message: string, history: ChatTurn[]): string {
 export function detectLanguage(text: string): 'ja' | 'en' {
   return CJK.test(text) ? 'ja' : 'en'
 }
+
+export type SmallTalk = 'greeting' | 'capabilities' | null
+
+const GREETING = /^(hi|hello|hey|hiya|good (morning|afternoon|evening)|g'?day|こんにちは|こんばんは|おはよう|はじめまして|初めまして|よろしく)[\s!！。.、,~〜ー]*$/i
+const CAPABILITIES = /(what can you (do|help|answer)|what do you (do|know)|how can you help|what (should|can) i ask|help me|^help$|何ができ|何を聞け|何が聞け|何を質問|どんなこと|使い方)/i
+
+/**
+ * Greetings and "what can you do?" match no profile passage, so retrieval finds nothing.
+ * They are recognised separately so the assistant introduces itself instead of declining.
+ */
+export function detectSmallTalk(message: string): SmallTalk {
+  const m = message.trim()
+  if (GREETING.test(m)) return 'greeting'
+  if (CAPABILITIES.test(m)) return 'capabilities'
+  return null
+}
+
+/** A fixed self-introduction, used when the LLM can't be reached. */
+export function smallTalkReply(kind: Exclude<SmallTalk, null>, lang: 'ja' | 'en') {
+  if (lang === 'ja') {
+    return `${kind === 'greeting' ? 'こんにちは！' : ''}片岡桃世のAIデジタルツインです。経歴、インターンでの仕事、作品、スキルや資格について、日本語か英語で聞いてください。たとえば「インターンでは何をしましたか？」「どんな技術を使えますか？」のように聞けます。ミーティングの予約もできます。`
+  }
+  return `${kind === 'greeting' ? 'Hi! ' : ''}I'm Momoyo Kataoka's AI digital twin. Ask me about my background, internships, projects, skills or certifications, in English or Japanese — for example "What did you do in your internship?" or "Which technologies do you use?". I can also book a meeting for you.`
+}

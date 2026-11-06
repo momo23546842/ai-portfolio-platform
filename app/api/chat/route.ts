@@ -3,7 +3,7 @@ import Groq from 'groq-sdk'
 import { prisma } from '@/lib/prisma'
 import { profileChunks } from '@/lib/profile-data'
 import {
-  buildIndex, search, formatContext, sanitizeHistory, retrievalQuery, detectLanguage,
+  buildIndex, search, formatContext, sanitizeHistory, retrievalQuery, detectLanguage, detectSmallTalk, smallTalkReply,
   MAX_MESSAGE_CHARS, type Chunk, type ChatTurn,
 } from '@/lib/rag'
 
@@ -32,6 +32,7 @@ ANSWER ONLY FROM THE INFORMATION BELOW.
 - If the passages don't cover the question, say honestly that you can't answer that here, and offer a meeting instead.
 - Reply in ${lang === 'ja' ? 'Japanese (丁寧語, natural and warm)' : 'English'}, the language the visitor used.
 - Keep it to 2–4 sentences unless the visitor asks for detail.
+- A greeting, or a question about what you can do, is not off-topic: greet back, introduce yourself in one sentence, and suggest two or three example questions (career, internships, projects, skills, booking a meeting).
 
 WHO YOU ARE (keep this framing):
 - An IT student in Sydney with hands-on internship experience in generative AI / full-stack development. Never give yourself a senior or full-time engineering title.
@@ -117,7 +118,10 @@ export async function POST(req: NextRequest) {
 
     // Retrieval: find the passages that answer this question (and the one before, for follow-ups).
     const index = buildIndex([...staticChunks, ...(await databaseChunks())])
-    const hits = search(index, retrievalQuery(message, history), TOP_K)
+    const smallTalk = detectSmallTalk(message)
+    let hits = search(index, retrievalQuery(message, history), TOP_K)
+    // A greeting matches no passage; give the model the profile so it can introduce itself.
+    if (smallTalk && !hits.length) hits = staticChunks.filter((c) => c.id === 'profile' || c.id === 'goal').map((c) => ({ ...c, score: 0 }))
 
     await saveConversation(sessionId, 'user', message, mode)
 
@@ -131,7 +135,7 @@ export async function POST(req: NextRequest) {
       if (!reply.trim()) throw new Error('empty reply')
     } catch (e) {
       console.error('Groq call failed, answering from the retrieved passage', e)
-      reply = fallbackReply(message, hits, lang)
+      reply = smallTalk ? smallTalkReply(smallTalk, lang) : fallbackReply(message, hits, lang)
     }
 
     await saveConversation(sessionId, 'assistant', reply, mode)
